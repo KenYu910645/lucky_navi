@@ -12,6 +12,7 @@ import serial
 #from geometry_msgs.msg import Twist, TransformStamped
 #from geometry_msgs.msg import PoseStamped, TransformStamped, Point, PointStamped
 from nav_msgs.msg import OccupancyGrid
+from radius_table import radius_table
 #from visualization_msgs.msg import Marker
 #from visualization_msgs.msg import MarkerArray
 
@@ -24,14 +25,11 @@ def global_map_CB(map):
     print ("Resolution: " + str(map.info.resolution))
     print ("Width: " + str(map.info.width))
     print ("Height: " + str(map.info.height))
-    global_costmap = map
+    global_costmap.header = map.header 
+    global_costmap.info = map.info 
     # print (map.data)
     #----- Test ------# 
-    # for i in map.data: 
     
-    global_costmap.data [ math.floor(map.info.origin.position.x*-1 / map.info.resolution)  + math.floor( -map.info.origin.position.y / map.info.resolution) * map.info.width ] = 100
-        
-    '''
     for i in map.data:
         if i == 0 : 
             global_costmap.data.append(0)
@@ -39,7 +37,93 @@ def global_map_CB(map):
             global_costmap.data.append(100)
         elif i == -1: 
             global_costmap.data.append(-1)
+    #global_costmap.data [ int(math.floor(map.info.origin.position.x*-1 / map.info.resolution)  + math.floor( -map.info.origin.position.y / map.info.resolution) * map.info.width) ] = 100
+    # global_costmap.data[XY2idx((0,0))] = 100 
+    # XY2idx(idx2XY(XY2idx((0.001,-0.001))))
+
+    #---- Test on radius table -----# 
+    
+    idx_ori = XY2idx((0.025, 0.025))
+    for k in range(30):
+        for i in radius_table[k-1]:
+            idx =idx_ori
+            idx += i[0]
+            idx += i[1] * map.info.width
+            global_costmap.data[idx] = 0
+        for i in radius_table[k]:
+            idx =idx_ori
+            idx += i[0]
+            idx += i[1] * map.info.width
+            global_costmap.data[idx] = 50
+        time.sleep(1) # For watch slowly 
+    
+    #----- How to get radius table ------# 
     '''
+    idx_ori = XY2idx((0.025, 0.025))
+    print ("idx_ori" + str(idx_ori))
+    total_output = []
+    for k in range (40):
+        # print ("=====================================================")
+        # print ( + " Layer : ")
+        output = list() 
+        for i in range(len(map.data)):
+            (x,y) = idx2XY(i)
+            dx = x - 0.025
+            dy = y - 0.025
+            if dx*dx + dy*dy <= ((k + 0.01)*map.info.resolution) * ((k + 0.01)*map.info.resolution):
+                if global_costmap.data[i] != 50:
+                    dIdx = i-idx_ori
+                    if dIdx%map.info.width > 1000 :
+                        change = dIdx%map.info.width - map.info.width
+                    else: 
+                        change = dIdx%map.info.width
+                    output.append([change , int(math.floor(dIdx/map.info.width)) ])
+                    global_costmap.data[i] = 50
+        
+        #print (str(k) +" = " + str(output ))
+        total_output.append(output)
+    print ("radius_table = " + str(total_output))
+    '''
+        
+def idx2XY (idx):
+    '''
+    idx must be interger
+    '''
+    reso  = global_costmap.info.resolution
+    width = global_costmap.info.width
+    height = global_costmap.info.height
+    origin = [global_costmap.info.origin.position.x , global_costmap.info.origin.position.y]
+
+    x = (idx % width) * reso + origin[0] + reso/2 # Center of point 
+    # y = round(idx / width) * reso + origin[1] + reso/2 
+    y = math.floor(idx / width) * reso + origin[1] + reso/2 
+
+    # print ("(x ,y ) = " + str((x,y)))
+    return (x, y)
+
+def XY2idx( XY_coor ):
+    '''
+    XY_coor = ( x , y)
+    '''
+    reso  = global_costmap.info.resolution
+    width = global_costmap.info.width
+    height = global_costmap.info.height
+    origin = [global_costmap.info.origin.position.x , global_costmap.info.origin.position.y]
+
+    # Y 
+    idx =  round((XY_coor[1] - origin[1]) / reso - 0.5) * width
+    # print ("Y : " +  str(idx) )
+    # idx =  math.floor((XY_coor[1] - origin[1]) / reso) * width
+    # X 
+    idx += round((XY_coor[0] - origin[0]) / reso - 0.5)
+    # idx += math.floor((XY_coor[0] - origin[0]) / reso)
+
+
+    # print ("idx = " + str(idx)) 
+    return int(idx) 
+
+
+
 def getInscribed(footprint):
     shortest_dis = float('inf')
     for i in range(len(footprint)): # i and i-1 
