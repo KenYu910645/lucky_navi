@@ -19,6 +19,8 @@ from radius_table import radius_table
 # Foot print (0,0) must be the center of incribed circle 
 foot_print = [[-0.57, 0.36],[0.57, 0.36],[0.57, -0.36],[-0.57, -0.36]]
 global_costmap = OccupancyGrid()
+circum_rad = None 
+inscribe_rad = None 
 
 def global_map_CB(map):
     global global_costmap
@@ -28,23 +30,55 @@ def global_map_CB(map):
     global_costmap.header = map.header 
     global_costmap.info = map.info 
     # print (map.data)
-    #----- Test ------# 
+    #-------  Test cartographer ------# 
     
-    for i in map.data:
-        if i == 0 : 
-            global_costmap.data.append(0)
-        elif i == 100: 
+    for ori_map_pixel in range(len(map.data)):
+        if map.data[ori_map_pixel] == 100:
             global_costmap.data.append(100)
-        elif i == -1: 
-            global_costmap.data.append(-1)
+        elif map.data[ori_map_pixel] == -1:
+            global_costmap.data.append(100) # Take unknow eara as obstacle 
+        else: #  == 0 
+            #------ Get closest obstacle distance from this point .-------# 
+            #------  Block output : obstacle_dis -------# 
+            obstacle_dis = None 
+            for radius_iter in range(20):# Check pixel surrond it.
+                if obstacle_dis != None : # Already get the answer
+                    break
+                for relative_pos in radius_table[radius_iter]: 
+                    relative_idx = ori_map_pixel + relative_pos[0] + relative_pos[1] * map.info.width
+                    try: 
+                        if map.data[relative_idx] == 100 : # is obstacle 
+                            obstacle_dis = radius_iter # Get obstacle distance 
+                            break
+                        else: 
+                            pass 
+                    except: 
+                        pass 
+            #---------- append cost pixel to costmap ------------# 
+            if obstacle_dis == None : # No obstacle at all 
+                global_costmap.data.append(0) # Free space 
+            else: 
+                # Cost calculate function 
+                if obstacle_dis <= inscribe_rad / map.info.resolution: 
+                    global_costmap.data.append(99)
+                elif obstacle_dis <= circum_rad / map.info.resolution: 
+                    global_costmap.data.append(49 + int(50 * (1 - (circum_rad - obstacle_dis*map.info.resolution)  /  (circum_rad - inscribe_rad)  )))
+                else: 
+                    global_costmap.data.append(int(100 * (1 - obstacle_dis / 20.0)))
+
+        
+
+            
     #global_costmap.data [ int(math.floor(map.info.origin.position.x*-1 / map.info.resolution)  + math.floor( -map.info.origin.position.y / map.info.resolution) * map.info.width) ] = 100
     # global_costmap.data[XY2idx((0,0))] = 100 
     # XY2idx(idx2XY(XY2idx((0.001,-0.001))))
 
-    #---- Test on radius table -----# 
     
+    
+    '''
+    # ------- Test radis_table -------# 
     idx_ori = XY2idx((0.025, 0.025))
-    for k in range(30):
+    for k in range(40):
         for i in radius_table[k-1]:
             idx =idx_ori
             idx += i[0]
@@ -56,15 +90,13 @@ def global_map_CB(map):
             idx += i[1] * map.info.width
             global_costmap.data[idx] = 50
         time.sleep(1) # For watch slowly 
-    
+    '''
     #----- How to get radius table ------# 
     '''
     idx_ori = XY2idx((0.025, 0.025))
     print ("idx_ori" + str(idx_ori))
     total_output = []
     for k in range (40):
-        # print ("=====================================================")
-        # print ( + " Layer : ")
         output = list() 
         for i in range(len(map.data)):
             (x,y) = idx2XY(i)
@@ -74,13 +106,11 @@ def global_map_CB(map):
                 if global_costmap.data[i] != 50:
                     dIdx = i-idx_ori
                     if dIdx%map.info.width > 1000 :
-                        change = dIdx%map.info.width - map.info.width
+                        change = dIdx%map.info.width - (map.info.width)
                     else: 
                         change = dIdx%map.info.width
-                    output.append([change , int(math.floor(dIdx/map.info.width)) ])
+                    output.append([change , int(round(dIdx/float(map.info.width))) ])
                     global_costmap.data[i] = 50
-        
-        #print (str(k) +" = " + str(output ))
         total_output.append(output)
     print ("radius_table = " + str(total_output))
     '''
@@ -153,6 +183,7 @@ def getCircumscribed (footprint):
     
 
 def main(args):
+    global circum_rad, inscribe_rad
     # Init something
     # v = elevator(1, 8) # 1F ~ 8F 
     rospy.init_node('global_cartographer', anonymous=True)
@@ -160,9 +191,11 @@ def main(args):
     # for visualization
     pub_global_costmap = rospy.Publisher('global_costmap', OccupancyGrid ,queue_size = 10,  latch=True)
     # ev.init_viz()s
-    
-    print ("getCircumscribed: " +  str(getCircumscribed(foot_print)))
-    print ("getInscribed: " +  str(getInscribed(foot_print)))
+    circum_rad = getCircumscribed(foot_print)
+    inscribe_rad = getInscribed(foot_print)
+
+    print ("getCircumscribed: " +  str(circum_rad))
+    print ("getInscribed: " +  str(inscribe_rad))
 
     #call at 10HZ
     r = rospy.Rate(1)    
