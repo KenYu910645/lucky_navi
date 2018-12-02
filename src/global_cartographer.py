@@ -3,6 +3,8 @@ import time
 import math
 from nav_msgs.msg import OccupancyGrid
 from radius_table import radius_table
+import rospy 
+import sys 
 
 class GLOBAL_CARTOGRAPHER():
     def __init__(self, footprint): 
@@ -11,7 +13,7 @@ class GLOBAL_CARTOGRAPHER():
         self.inscribe_rad = self.getInscribed(footprint) 
         self.dis2costList = []
         self.MAX_COST_DISTANCE = 20  # 17 pixel radius 
-        self.is_init = False # == True, if Global map is init completed.
+        self.is_need_pub = False # == True, if Global map is need pub.
         #---- Map info -----# 
         self.resolution = None 
         self.width = None 
@@ -67,7 +69,7 @@ class GLOBAL_CARTOGRAPHER():
                             else:
                                 pass
         print ("Time spend at global_costmap : " + str(time.time() - t_start) + " sec. ")
-        self.is_init = True 
+        self.is_need_pub = True 
         
         '''
         Iterate all pixel at map  : TOO slow, takes about 20 sec to initial 
@@ -205,3 +207,30 @@ class GLOBAL_CARTOGRAPHER():
             if shortest_dis > dis :
                 shortest_dis = dis # update distance
         return shortest_dis
+
+
+def main(args):
+    # Init something
+    # v = elevator(1, 8) # 1F ~ 8F 
+    
+    #----- Load paramters -----# 
+    foot_print = [[-0.57, 0.36],[0.57, 0.36],[0.57, -0.36],[-0.57, -0.36]]
+    
+    #----- Init node ------# 
+    global_cartographer = GLOBAL_CARTOGRAPHER(foot_print)
+    rospy.init_node('global_cartographer', anonymous=True)
+    rospy.Subscriber('/map', OccupancyGrid, global_cartographer.global_map_CB)
+    pub_global_costmap = rospy.Publisher('global_costmap', OccupancyGrid ,queue_size = 10,  latch=True)
+    
+    r = rospy.Rate(10)#call at 10HZ
+    while (not rospy.is_shutdown()):
+        if global_cartographer.is_need_pub: 
+            pub_global_costmap.publish(global_cartographer.global_costmap)
+            global_cartographer.is_need_pub = False 
+        r.sleep()
+
+if __name__ == '__main__':
+    try:
+        main(sys.argv)
+    except rospy.ROSInterruptException:
+        pass
