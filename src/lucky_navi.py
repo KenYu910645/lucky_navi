@@ -6,7 +6,6 @@ import time
 import sys 
 import math
 
-        
 def main(args):
     # Init something
     rospy.init_node('lucky_navi', anonymous=True)
