@@ -19,7 +19,7 @@ class GLOBAL_CARTOGRAPHER():
         self.width = None 
         self.height = None 
         #----- Global costmap ------# 
-        self.global_costmap = OccupancyGrid()
+        self.global_costmap = OccupancyGrid() # Output 
 
     def global_map_CB(self, map):
         t_start = time.time()
@@ -208,29 +208,3 @@ class GLOBAL_CARTOGRAPHER():
                 shortest_dis = dis # update distance
         return shortest_dis
 
-
-def main(args):
-    # Init something
-    # v = elevator(1, 8) # 1F ~ 8F 
-    
-    #----- Load paramters -----# 
-    foot_print = [[-0.57, 0.36],[0.57, 0.36],[0.57, -0.36],[-0.57, -0.36]]
-    
-    #----- Init node ------# 
-    global_cartographer = GLOBAL_CARTOGRAPHER(foot_print)
-    rospy.init_node('global_cartographer', anonymous=True)
-    rospy.Subscriber('/map', OccupancyGrid, global_cartographer.global_map_CB)
-    pub_global_costmap = rospy.Publisher('global_costmap', OccupancyGrid ,queue_size = 10,  latch=True)
-    
-    r = rospy.Rate(10)#call at 10HZ
-    while (not rospy.is_shutdown()):
-        if global_cartographer.is_need_pub: 
-            pub_global_costmap.publish(global_cartographer.global_costmap)
-            global_cartographer.is_need_pub = False 
-        r.sleep()
-
-if __name__ == '__main__':
-    try:
-        main(sys.argv)
-    except rospy.ROSInterruptException:
-        pass
