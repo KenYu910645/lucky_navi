@@ -50,22 +50,34 @@ class GLOBAL_PLANNER():
         self.navi_goal = None # idx
         #------- A* -------# 
         self.openset = [] 
-        self.closedset = []
+        self.closedset = {} # -> dict)
         self.g_score = {}
         self.h_score = {}
         self.f_score = {} # F_score = h_score + g_score
         self.came_from = {}
         self.is_need_pub = False 
+        self.clean_screen()
+
+
+
+    def clean_screen (self):
+        #------- clean screen -------#
+        marker = Marker()
+        marker.header.frame_id = "/map"
+        marker.action = marker.DELETEALL
+        self.markerArray.markers.append(marker)
+        pub_marker.publish(self.markerArray)
+
         #------- Debug draw -------# 
         self.markerArray = MarkerArray()
-        #------- clean screen -------# 
-        pub_marker.publish(self.markerArray)
 
     def move_base_simple_goal_CB(self, navi_goal):
         print ("Target : " + str(navi_goal))
         self.reset()
         self.navi_goal = self.XY2idx((navi_goal.pose.position.x, navi_goal.pose.position.y))
+        t_start = time.time()
         self.plan_do_it()
+        print ("[A*] time spend: " + str(time.time() - t_start))
     
     def plan_do_it(self):
         '''
@@ -88,7 +100,7 @@ class GLOBAL_PLANNER():
             #    #self.is_reachable = False
             #    return
             x = self.lowest()#  x -  having the lowest f_score[] value in openset
-            print ("Current node : "+ str(x)) 
+            # print ("Current node : "+ str(x)) 
             
             #if GOAL is reached
             if x == self.navi_goal: 
@@ -98,26 +110,32 @@ class GLOBAL_PLANNER():
                 break #  "finish"
                 # retur
             self.openset.remove(x) # remove x from openset
-            self.closedset.append(x) #add x to closedset
-
+            
+            # Debug
             self.set_point(x, 210, 188 , 167)
-
+            x_count = 0
             #Find neighbor of X 
             for y in self.neighbor(x):
                 if y in self.closedset: # if y is already closed
-                    continue
-                tentative_g_score = self.g_score[x] + self.neighbor_dist(x,y) + self.neighbor_delta_cost(x ,y) * 0.01 # Cost: y -x (0 ~ 100)
-                if (not y in self.openset) or (tentative_g_score < self.g_score[y]):
-                    self.came_from[y] = x            #y is key, x is value//make y become child of X 
-                    # calculate g(n), h(n), f(n)
-                    self.g_score[y] = tentative_g_score
-                    self.h_score[y] = self.goal_dis_est(y, self.navi_goal)
-                    self.f_score[y] = self.g_score[y] + self.h_score[y]
-                if not y in self.openset:
-                    self.openset.append(y) # add y to openset
-                    #---------- Debug ---------# 
-                    self.set_point(y, 255, 255 , 0)
-            pub_marker.publish(self.markerArray)
+                    if self.closedset[y] < 8:   
+                        self.closedset[y] += 1 # X is going to be closedset
+                    elif self.closedset[y] >= 8: # Can get rid of y  
+                        del self.closedset[y]
+                    x_count += 1
+                else: 
+                    tentative_g_score = self.g_score[x] + self.neighbor_dist(x,y) + self.neighbor_delta_cost(x ,y) * 0.1  # Cost: y -x (0 ~ 100)
+                    if (not y in self.openset) or (tentative_g_score < self.g_score[y]):
+                        self.came_from[y] = x            #y is key, x is value//make y become child of X 
+                        # calculate g(n), h(n), f(n)
+                        self.g_score[y] = tentative_g_score
+                        self.h_score[y] = self.goal_dis_est(y, self.navi_goal)
+                        self.f_score[y] = self.g_score[y] + self.h_score[y]
+                    if not y in self.openset:
+                        self.openset.append(y) # add y to openset
+                        #---------- Debug ---------# 
+                        self.set_point(y, 255, 255 , 0)
+            self.closedset[x] = x_count  #add x to closedset
+            # pub_marker.publish(self.markerArray)
 
         
         #----------------- Publish Path----------------#
@@ -136,7 +154,11 @@ class GLOBAL_PLANNER():
         self.is_need_pub = True 
 
     def neighbor_delta_cost(self, x ,y):
-        return GC.global_costmap.data[y] - GC.global_costmap.data[x]
+        #
+        if GC.global_costmap.data[y] >= 99:
+            return float("inf")
+        else: 
+            return GC.global_costmap.data[y] - GC.global_costmap.data[x]
     
     def neighbor_dist(self,n1,n2):
         '''
