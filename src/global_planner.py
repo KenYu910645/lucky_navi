@@ -30,8 +30,8 @@ class GLOBAL_PLANNER():
         self.openset = [] 
         self.closedset = []
         self.g_score = {}
-        self.h_score = {}
-        self.f_score = {} # F_score = h_score + g_score
+        # self.h_score = {}
+        # self.f_score = {} # F_score = h_score + g_score
         self.came_from = {}
         # self.is_reachable = True  # TODO state????
         self.is_need_pub = False 
@@ -49,11 +49,11 @@ class GLOBAL_PLANNER():
         #------ Goal ---------#
         self.navi_goal = None # idx
         #------- A* -------# 
-        self.openset = [] 
-        self.closedset = {} # -> dict)
+        self.openset = {}  # -> dict() , combine with f_score[] 
+        self.closedset = {} # -> dict()
         self.g_score = {}
-        self.h_score = {}
-        self.f_score = {} # F_score = h_score + g_score
+        # self.h_score = {}
+        # self.f_score = {} # F_score = h_score + g_score
         self.came_from = {}
         self.is_need_pub = False 
         self.clean_screen()
@@ -87,10 +87,10 @@ class GLOBAL_PLANNER():
         global pub_marker
         current_pos_idx = self.XY2idx((self.current_position.x, self.current_position.y))
         x = current_pos_idx
-        self.openset.append(x)
+        # self.openset.append(x)
         self.g_score[x] = self.neighbor_dist(x,x)
-        self.h_score[x] = self.goal_dis_est(x, self.navi_goal)
-        self.f_score[x] = self.g_score[x] + self.h_score[x]
+        # self.h_score[x] = self.goal_dis_est(x, self.navi_goal)
+        self.openset[x] = self.g_score[x] + self.goal_dis_est(x, self.navi_goal)
 
         is_finish_plan = False 
         while not is_finish_plan : 
@@ -102,17 +102,13 @@ class GLOBAL_PLANNER():
             x = self.lowest()#  x -  having the lowest f_score[] value in openset
             # print ("Current node : "+ str(x)) 
             
-            #if GOAL is reached
-            if x == self.navi_goal: 
+            if x == self.navi_goal: #if GOAL is reached
                 rospy.loginfo("[A*] arrive goal !!")
-                # self.is_finished = True
                 is_finish_plan = True 
-                break #  "finish"
-                # retur
-            self.openset.remove(x) # remove x from openset
+                break
             
             # Debug
-            self.set_point(x, 210, 188 , 167)
+            #self.set_point(x, 210, 188 , 167)
             x_count = 0
             #Find neighbor of X 
             for y in self.neighbor(x):
@@ -124,19 +120,21 @@ class GLOBAL_PLANNER():
                     x_count += 1
                 else: 
                     tentative_g_score = self.g_score[x] + self.neighbor_dist(x,y) + self.neighbor_delta_cost(x ,y) * 0.1  # Cost: y -x (0 ~ 100)
-                    if (not y in self.openset) or (tentative_g_score < self.g_score[y]):
-                        self.came_from[y] = x            #y is key, x is value//make y become child of X 
-                        # calculate g(n), h(n), f(n)
-                        self.g_score[y] = tentative_g_score
-                        self.h_score[y] = self.goal_dis_est(y, self.navi_goal)
-                        self.f_score[y] = self.g_score[y] + self.h_score[y]
-                    if not y in self.openset:
-                        self.openset.append(y) # add y to openset
-                        #---------- Debug ---------# 
-                        self.set_point(y, 255, 255 , 0)
-            self.closedset[x] = x_count  #add x to closedset
-            # pub_marker.publish(self.markerArray)
 
+                    try: 
+                        if tentative_g_score < self.g_score[y]: 
+                            self.came_from[y] = x            #y is key, x is value//make y become child of X 
+                            self.g_score[y] = tentative_g_score
+                            self.openset[y] = self.g_score[y] + self.goal_dis_est(y, self.navi_goal)
+                    except : # y is not in openset
+                        self.came_from[y] = x            #y is key, x is value//make y become child of X 
+                        self.g_score[y] = tentative_g_score
+                        self.openset[y] = self.g_score[y] + self.goal_dis_est(y, self.navi_goal)
+                        #---------- Debug ---------# 
+                        #self.set_point(y, 255, 255 , 0)
+            self.closedset[x] = x_count  #add x to closedset 
+            del self.openset[x] # remove x from openset
+            # pub_marker.publish(self.markerArray)
         
         #----------------- Publish Path----------------#
         p = self.navi_goal
@@ -201,9 +199,9 @@ class GLOBAL_PLANNER():
         ans = -1 
         lowest_score = float("inf")
         for i in self.openset:
-            if self.f_score[i] < lowest_score:
+            if self.openset[i] < lowest_score:
                 ans = i
-                lowest_score = self.f_score[i]
+                lowest_score = self.openset[i]
         return ans
 
     def neighbor(self, x):
