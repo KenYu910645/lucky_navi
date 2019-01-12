@@ -1,0 +1,52 @@
+<?xml version="1.0"?>
+<launch>
+    <!-- Parameters -->
+    <arg name="is_multi_lidar" default="true"/>
+    <arg name="is_simulation" default="true"/>
+    <arg name="with_gazebo" default="true"/>
+    <!-- Initial pose -->
+    <arg name="initial_pose_x"  default="23.0339479288"/>
+    <arg name="initial_pose_y"  default="22.3645514776"/>
+    <arg name="initial_pose_a"  default="0.0"/>
+
+    <!-- ar base (real robot)-->
+    <!-- (simulated robot) -->
+    <group if="$(arg is_simulation)">
+        <include if="$(arg with_gazebo)" file="$(find ar)/launch/simulation/gazebo_AMR250_willowgarage.launch" />
+        <include file="$(find ar)/launch/simulation/ar_base_simulation.launch">
+            <arg name="is_multi_lidar" value="$(arg is_multi_lidar)"/>
+        </include>
+    </group>
+
+    <!-- Map servers -->
+    <group if="$(arg is_simulation)">
+        <!--  map server for amcl  -->
+        <node name="map_server_amcl" pkg="map_server" type="map_server" args="$(find ar)/map/simulation/WilloGarage_2.yaml">
+            <remap from="map" to="map_amcl"/>
+        </node>
+        <!--  map server for move_base  -->
+        <node name="map_server_nav" pkg="map_server" type="map_server" args="$(find ar)/map/simulation/WilloGarage_2.yaml"/>
+    </group>
+
+    <!-- move base (with dwa) -->
+    <!--include file="$(find ar)/launch/includes/dwa_move_base.launch.xml" >
+        <arg name="is_multi_lidar" value="$(arg is_multi_lidar)" />
+    </include-->
+
+    <!-- mux (multiplexer) for /cmd_vel -->
+    <!--node pkg="topic_tools" type="mux" name="mux_cmd_vel" args="/cmd_vel /move_base/cmd_vel /docking/cmd_vel mux:=mux_cmd_vel" /-->
+
+    <!-- amcl -->
+    <include file="$(find ar)/launch/includes/amcl_ar.launch.xml">
+        <arg name="initial_pose_x" value="$(arg initial_pose_x)" />
+        <arg name="initial_pose_y" value="$(arg initial_pose_y)" />
+        <arg name="initial_pose_a" value="$(arg initial_pose_a)" />
+    </include>
+
+    <!-- position listenner -->
+    <node pkg="ar" type="position_listener" name="position_listener">
+        <!-- For test only -->
+        <remap from="/robot/current_position" to="/andbot/current_position" />
+        <remap from="current_position_euler" to="/andbot/current_position_euler" />
+    </node>
+</launch>
