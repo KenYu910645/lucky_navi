@@ -25,6 +25,7 @@ class LINEAR_VELOCITY_PLANNER():
         self.current_position = PoseStamped()
         # ---- Current Goal ------# 
         self.goal = PoseStamped()
+        self.goal_mode = "waypoint" # 
         # ---- State Machine -----#
         self.state = "stand_by" # "abort", "timeout" , "moving"
         #------- #
@@ -37,7 +38,12 @@ class LINEAR_VELOCITY_PLANNER():
         '''
         Clean Current Task , and reset to init.
         '''
-        self.state = "stand_by"
+        # ---- Current Goal ------# 
+        self.goal = PoseStamped()
+        # ---- State Machine -----#
+        self.state = "stand_by" # "abort", "timeout" , "moving"
+        #------- #
+        self.markerArray = MarkerArray()
 
     def clean_screen (self):
         #------- clean screen -------#
@@ -99,7 +105,6 @@ class LINEAR_VELOCITY_PLANNER():
             rospy.loginfo ("alpha = " + str(alpha))
             rospy.loginfo ("beta = " + str(beta))
 
-            #---------------------------------# 
 
             V = p1*r/math.cos(alpha)
 
@@ -113,6 +118,15 @@ class LINEAR_VELOCITY_PLANNER():
             V = V * k
             W = W * k
 
+
+            #---------------------------------#
+            #reached or not 
+            if self.goal_mode == "waypoint" and  r < 0.05 :
+                V = 0 
+                W = 0
+                self.reset() 
+                
+            #---------------------------------#
             rospy.loginfo ("V = " + str(V))
             rospy.loginfo ("W = " + str(W))
             self.cmd_vel.linear.x = V 
