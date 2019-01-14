@@ -11,6 +11,10 @@ from tf import transformations
 
 #----- Load paramters -----# 
 # foot_print = [[-0.57, 0.36],[0.57, 0.36],[0.57, -0.36],[-0.57, -0.36]]
+p1 = 1
+p2 = 1/0.375 
+Vel_limit = 0.7
+
 
 # LVP = LINEAR_VELOCITY_PLANNER()
 pub_marker = rospy.Publisher('markers', MarkerArray,queue_size = 1,  latch=False )
@@ -26,7 +30,8 @@ class LINEAR_VELOCITY_PLANNER():
         #------- #
         self.markerArray = MarkerArray()
         #----- Publisher ------# 
-        pub_cmd_vel = rospy.Publisher('/cmd_vel', Twist ,queue_size = 10,  latch=False)
+        self.pub_cmd_vel = rospy.Publisher('/cmd_vel', Twist ,queue_size = 10,  latch=False)
+        self.cmd_vel = Twist()
 
     def reset (self):
         '''
@@ -46,7 +51,7 @@ class LINEAR_VELOCITY_PLANNER():
         self.markerArray = MarkerArray()
 
     def move_base_simple_goal_CB(self, goal):
-        print ("Target : " + str(goal))
+        rospy.loginfo ("Target : " + str(goal))
         self.goal = goal # TODO Check Valid Goal, or the goal is already reached.
         self.state = "moving"
         # TODO Do something.
@@ -54,12 +59,23 @@ class LINEAR_VELOCITY_PLANNER():
         #self.navi_goal = self.XY2idx((navi_goal.pose.position.x, navi_goal.pose.position.y))
         t_start = time.time()
         self.plan_do_it()
-        print ("[A*] time spend: " + str(time.time() - t_start))
+        rospy.loginfo ("[A*] time spend: " + str(time.time() - t_start))
     
     def current_position_CB(self, current_position):
         # print ("Current Position : " + str(current_position))
         self.current_position = current_position
     
+    def angle_substitution(self, ang):
+        ans = ang % (2* math.pi)
+
+        if ans > math.pi :
+            return (2* math.pi) - ans 
+        elif ans < -math.pi : 
+            return (2* math.pi) + ans 
+        else: 
+            return ans 
+
+
     def plan_do_it(self):
         '''
         Time Loop
@@ -67,21 +83,41 @@ class LINEAR_VELOCITY_PLANNER():
         while self.state == "moving": 
             #----- Get r , alpha , beta ------# 
             pos_dx = self.goal.pose.position.x - self.current_position.pose.position.x
-            pos_dy = self.goal.pose.position.x - self.current_position.pose.position.x
+            pos_dy = self.goal.pose.position.y - self.current_position.pose.position.y
             r = math.sqrt(pos_dx*pos_dx + pos_dy*pos_dy)
 
             r_yaw = math.atan2(pos_dy, pos_dx)
 
             cureent_position_yaw = transformations.euler_from_quaternion(self.pose_quaternion_2_list(self.current_position.pose.orientation))[2]
-            alpha = cureent_position_yaw - r_yaw
+            alpha = self.angle_substitution(cureent_position_yaw - r_yaw)
 
             goal_yaw = transformations.euler_from_quaternion(self.pose_quaternion_2_list(self.goal.pose.orientation))[2]
 
-            beta = goal_yaw - r_yaw
-            print ("++++++++++++++++++++++++++")
-            print ("r = " , str(r))
-            print ("alpha = " , str(alpha))
-            print ("beta = " , str(beta)) # TODO maybe have some problem 
+            beta = self.angle_substitution(goal_yaw - r_yaw)
+            rospy.loginfo ("++++++++++++++++++++++++++")
+            rospy.loginfo ("r = " + str(r))
+            rospy.loginfo ("alpha = " + str(alpha))
+            rospy.loginfo ("beta = " + str(beta))
+
+            #---------------------------------# 
+
+            V = p1*r/math.cos(alpha)
+
+            if r < 0.05 : 
+                W = p2*(beta)
+            else: 
+                W = p2*(alpha)
+
+            k = Vel_limit / (V + W)
+
+            V = V * k
+            W = W * k
+
+            rospy.loginfo ("V = " + str(V))
+            rospy.loginfo ("W = " + str(W))
+            self.cmd_vel.linear.x = V 
+            self.cmd_vel.angular.z = W
+            self.pub_cmd_vel.publish(self.cmd_vel)
             time.sleep(0.1)
         
     def set_point(self, idx ,r ,g ,b ):

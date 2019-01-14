@@ -72,12 +72,12 @@ class GLOBAL_PLANNER():
         self.markerArray = MarkerArray()
 
     def move_base_simple_goal_CB(self, navi_goal):
-        print ("Target : " + str(navi_goal))
+        rospy.loginfo("Target : " + str(navi_goal))
         self.reset()
         self.navi_goal = self.XY2idx((navi_goal.pose.position.x, navi_goal.pose.position.y))
         t_start = time.time()
         self.plan_do_it()
-        print ("[A*] time spend: " + str(time.time() - t_start))
+        rospy.loginfo("[A*] time spend: " + str(time.time() - t_start))
     
     def plan_do_it(self):
         '''
@@ -142,7 +142,7 @@ class GLOBAL_PLANNER():
             #----- Convert idx -> Pose -------#
             step = Pose() 
             if p == current_pos_idx:
-                print ("Finish drawing !!")
+                rospy.loginfo("Finish drawing !!")
                 break 
             (step.position.x ,step.position.y) = self.idx2XY(p)
             self.set_point(p, 255, 255, 255 )
