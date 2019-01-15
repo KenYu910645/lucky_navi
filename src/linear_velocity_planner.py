@@ -70,9 +70,13 @@ class LINEAR_VELOCITY_PLANNER():
     def current_position_CB(self, current_position):
         # print ("Current Position : " + str(current_position))
         self.current_position = current_position
-    
+    def sign (self, x):
+        if x >= 0: 
+            return 1
+        else: 
+            return -1 
     def angle_substitution(self, ang):
-        ans = ang % (2* math.pi)
+        ans = (abs(ang) % (2* math.pi)) * self.sign(ang)
 
         if ans > math.pi :
             return (2* math.pi) - ans 
@@ -101,19 +105,21 @@ class LINEAR_VELOCITY_PLANNER():
 
             beta = self.angle_substitution(goal_yaw - r_yaw)
             rospy.loginfo ("++++++++++++++++++++++++++")
+            rospy.loginfo ("cureent_position_yaw = " + str(cureent_position_yaw))
+            rospy.loginfo ("r_yaw = " + str(r_yaw))
             rospy.loginfo ("r = " + str(r))
             rospy.loginfo ("alpha = " + str(alpha))
             rospy.loginfo ("beta = " + str(beta))
 
 
-            V = p1*r/math.cos(alpha)
+            V = p1*r*math.cos(alpha)
 
-            if r < 0.05 : 
-                W = p2*(beta)
+            if r < 0.05 :
+                W = p2*(-beta)
             else: 
-                W = p2*(alpha)
+                W = p2*(-alpha)
 
-            k = Vel_limit / (V + W)
+            k = Vel_limit / (abs(V) + abs(W))
 
             V = V * k
             W = W * k
