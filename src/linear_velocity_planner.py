@@ -102,8 +102,8 @@ class LINEAR_VELOCITY_PLANNER():
             alpha = self.angle_substitution(cureent_position_yaw - r_yaw)
 
             goal_yaw = transformations.euler_from_quaternion(self.pose_quaternion_2_list(self.goal.pose.orientation))[2]
-
             beta = self.angle_substitution(goal_yaw - r_yaw)
+            
             rospy.loginfo ("++++++++++++++++++++++++++")
             rospy.loginfo ("cureent_position_yaw = " + str(cureent_position_yaw))
             rospy.loginfo ("r_yaw = " + str(r_yaw))
