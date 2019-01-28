@@ -13,7 +13,10 @@ from tf import transformations
 # foot_print = [[-0.57, 0.36],[0.57, 0.36],[0.57, -0.36],[-0.57, -0.36]]
 p1 = 1
 p2 = 1/0.375 
-Vel_limit = 0.7
+Vel_limit = 0.7 # Should be in class, modified dynamic.
+IS_ENABLE_MOVE_BACKWORD = True 
+
+
 
 
 # LVP = LINEAR_VELOCITY_PLANNER()
@@ -33,6 +36,8 @@ class LINEAR_VELOCITY_PLANNER():
         #----- Publisher ------# 
         self.pub_cmd_vel = rospy.Publisher('/cmd_vel', Twist ,queue_size = 10,  latch=False)
         self.cmd_vel = Twist()
+        #----- Counting Star ------# 
+        self.t_start_moving = None 
 
     def reset (self):
         '''
@@ -44,6 +49,8 @@ class LINEAR_VELOCITY_PLANNER():
         self.state = "stand_by" # "abort", "timeout" , "moving"
         #------- #
         self.markerArray = MarkerArray()
+        #----- Counting Star ------# 
+        self.t_start_moving = None 
 
     def clean_screen (self):
         #------- clean screen -------#
@@ -63,34 +70,45 @@ class LINEAR_VELOCITY_PLANNER():
         # TODO Do something.
         #self.reset()
         #self.navi_goal = self.XY2idx((navi_goal.pose.position.x, navi_goal.pose.position.y))
-        t_start = time.time()
-        self.plan_do_it()
-        rospy.loginfo ("[A*] time spend: " + str(time.time() - t_start))
+        self.t_start_moving  = time.time()
     
     def current_position_CB(self, current_position):
         # print ("Current Position : " + str(current_position))
         self.current_position = current_position
+
     def sign (self, x):
         if x >= 0: 
             return 1
         else: 
             return -1 
+        
     def angle_substitution(self, ang):
-        ans = (abs(ang) % (2* math.pi)) * self.sign(ang)
+        '''
+        Make sure  ang is 0 ~ pi/2 or -0 ~ -pi/2 
+        '''
+        ans = (abs(ang) % (2* math.pi)) * self.sign(ang) # Make sure not ot exceed 360
 
         if ans > math.pi :
-            return (2* math.pi) - ans 
+            # return (2* math.pi) - ans 
+            ans =  ans - (2* math.pi) # Negative 
         elif ans < -math.pi : 
-            return (2* math.pi) + ans 
+            ans =  (2* math.pi) + ans # Positive 
         else: 
-            return ans 
+            pass 
+        return ans 
 
 
-    def plan_do_it(self):
+    def iterateOnce (self):
         '''
-        Time Loop
+        Switch Case 
         '''
-        while self.state == "moving": 
+        if self.state == "stand_by":
+            pass
+        elif self.state == "reached":
+            rospy.loginfo ("[Linear_velocity_planner] time spend: " + str(time.time() - self.t_start_moving))
+            self.reset() 
+
+        elif self.state == "moving": 
             #----- Get r , alpha , beta ------# 
             pos_dx = self.goal.pose.position.x - self.current_position.pose.position.x
             pos_dy = self.goal.pose.position.y - self.current_position.pose.position.y
@@ -100,6 +118,15 @@ class LINEAR_VELOCITY_PLANNER():
 
             cureent_position_yaw = transformations.euler_from_quaternion(self.pose_quaternion_2_list(self.current_position.pose.orientation))[2]
             alpha = self.angle_substitution(cureent_position_yaw - r_yaw)
+
+            # ------- Check Go Farword or Backword --------#
+            linear_direction = 1 
+            if IS_ENABLE_MOVE_BACKWORD: 
+                if abs(alpha) > math.pi/2:
+                    rospy.loginfo("Decide to go BackWord.")
+                    cureent_position_yaw = self.angle_substitution(cureent_position_yaw + math.pi)
+                    alpha = self.angle_substitution(cureent_position_yaw - r_yaw)
+                    linear_direction = -1 
 
             goal_yaw = transformations.euler_from_quaternion(self.pose_quaternion_2_list(self.goal.pose.orientation))[2]
             beta = self.angle_substitution(goal_yaw - r_yaw)
@@ -112,7 +139,7 @@ class LINEAR_VELOCITY_PLANNER():
             rospy.loginfo ("beta = " + str(beta))
 
 
-            V = p1*r*math.cos(alpha)
+            V =  abs(p1*r*math.cos(alpha)) * linear_direction
 
             if r < 0.05 :
                 W = p2*(-beta)
@@ -130,7 +157,7 @@ class LINEAR_VELOCITY_PLANNER():
             if self.goal_mode == "waypoint" and  r < 0.05 :
                 V = 0 
                 W = 0
-                self.reset() 
+                self.state = "reached"
                 
             #---------------------------------#
             rospy.loginfo ("V = " + str(V))
@@ -138,7 +165,8 @@ class LINEAR_VELOCITY_PLANNER():
             self.cmd_vel.linear.x = V 
             self.cmd_vel.angular.z = W
             self.pub_cmd_vel.publish(self.cmd_vel)
-            time.sleep(0.1)
+        else: 
+            pass 
         
     def set_point(self, idx ,r ,g ,b ):
         '''
@@ -161,6 +189,7 @@ class LINEAR_VELOCITY_PLANNER():
         marker.pose.orientation.w = 1.0
         # (marker.pose.position.x , marker.pose.position.y) = self.idx2XY(idx)
         self.markerArray.markers.append(marker)
+    
     def pose_quaternion_2_list(self, quaternion):
         """
         This function help transfer the geometry_msgs.msg.PoseStameped 
@@ -177,7 +206,6 @@ def main(args):
     rospy.Subscriber('/move_base_simple/goal', PoseStamped, LVP.move_base_simple_goal_CB) # TODO for testing 
     rospy.Subscriber('/current_position', PoseStamped, LVP.current_position_CB) 
 
-    
     r = rospy.Rate(10)#call at 10HZ
     while (not rospy.is_shutdown()):
         '''
@@ -188,6 +216,7 @@ def main(args):
             pub_global_path.publish(GP.global_path)
             GP.is_need_pub = False
         '''
+        LVP.iterateOnce()
         r.sleep()
 
 if __name__ == '__main__':

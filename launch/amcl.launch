@@ -5,8 +5,8 @@
     <arg name="is_simulation" default="true"/>
     <arg name="with_gazebo" default="true"/>
     <!-- Initial pose -->
-    <arg name="initial_pose_x"  default="23.0339479288"/>
-    <arg name="initial_pose_y"  default="22.3645514776"/>
+    <arg name="initial_pose_x"  default="0.0"/>
+    <arg name="initial_pose_y"  default="0.0"/>
     <arg name="initial_pose_a"  default="0.0"/>
 
     <!-- ar base (real robot)-->
