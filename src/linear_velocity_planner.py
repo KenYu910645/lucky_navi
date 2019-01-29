@@ -16,6 +16,9 @@ p2 = 1/0.375 # W, p controller # How much you care about 'alpha'
 # p3 = # How much you care about 'beta'
 Vel_limit = 0.7 # Should be in class, modified dynamic.
 IS_ENABLE_MOVE_BACKWORD = True 
+TOUCH_ZONE_RADIUS = 0.05 # m 
+TOUCH_ZONE_ANGLE = 0.017 # rad 
+ADJUST_ZONE_RADIUS = 0.20 # m 
 
 # LVP = LINEAR_VELOCITY_PLANNER()
 pub_marker = rospy.Publisher('markers', MarkerArray,queue_size = 1,  latch=False )
@@ -26,7 +29,7 @@ class LINEAR_VELOCITY_PLANNER():
         self.current_position = PoseStamped()
         # ---- Current Goal ------# 
         self.goal = PoseStamped()
-        self.goal_mode = "waypoint" # 
+        self.goal_mode = "goal"# "waypoint" # 
         # ---- State Machine -----#
         self.state = "stand_by" # "abort", "timeout" , "moving"
         #------- #
@@ -117,6 +120,9 @@ class LINEAR_VELOCITY_PLANNER():
             cureent_position_yaw = transformations.euler_from_quaternion(self.pose_quaternion_2_list(self.current_position.pose.orientation))[2]
             alpha = self.angle_substitution(cureent_position_yaw - r_yaw)
 
+            goal_yaw = transformations.euler_from_quaternion(self.pose_quaternion_2_list(self.goal.pose.orientation))[2]
+            beta = self.angle_substitution(cureent_position_yaw - goal_yaw) # cureent_position_yaw - goal_yaw 
+
             # ------- Check Go Farword or Backword --------#
             linear_direction = 1 
             if IS_ENABLE_MOVE_BACKWORD: 
@@ -125,25 +131,35 @@ class LINEAR_VELOCITY_PLANNER():
                     cureent_position_yaw = self.angle_substitution(cureent_position_yaw + math.pi)
                     alpha = self.angle_substitution(cureent_position_yaw - r_yaw)
                     linear_direction = -1 
-
-            goal_yaw = transformations.euler_from_quaternion(self.pose_quaternion_2_list(self.goal.pose.orientation))[2]
-            beta = self.angle_substitution(goal_yaw - r_yaw)
             
-            rospy.loginfo ("++++++++++++++++++++++++++")
-            rospy.loginfo ("cureent_position_yaw = " + str(cureent_position_yaw))
-            rospy.loginfo ("r_yaw = " + str(r_yaw))
-            rospy.loginfo ("r = " + str(r))
-            rospy.loginfo ("alpha = " + str(alpha))
-            rospy.loginfo ("beta = " + str(beta))
+            if r < ADJUST_ZONE_RADIUS: 
+                rospy.loginfo ("++++++++++++++++++++++++++")
+                rospy.loginfo ("cureent_position_yaw = " + str(cureent_position_yaw))
+                rospy.loginfo ("r_yaw                =  " + str(r_yaw))
+                rospy.loginfo ("r                    = " + str(r))
+                rospy.loginfo ("alpha                = " + str(alpha))
+                rospy.loginfo ("beta                 = " + str(beta))
 
-
+            # Calculate V 
             V =  abs(p1*r*math.cos(alpha)) * linear_direction
 
-            if r < 0.05 :
-                W = p2*(-beta)
-            else: 
-                W = p2*(-alpha)
+            # Calculate W 
+            if r < TOUCH_ZONE_RADIUS : # Inside touch zone 
+                alpha_pecentage = 0
+                beta_pecentage  = 1
+                # rospy.loginfo("+++++++++++++++++++++++++++++beta adjustment")
+                # W = -p2*beta
+            elif r < ADJUST_ZONE_RADIUS: # Inside adjust zone 
+                alpha_pecentage = math.pow((ADJUST_ZONE_RADIUS - r) , 2)/math.pow((ADJUST_ZONE_RADIUS - TOUCH_ZONE_RADIUS) , 2)
+                beta_pecentage  = 1 - (math.pow((ADJUST_ZONE_RADIUS - r) , 2)/math.pow((ADJUST_ZONE_RADIUS - TOUCH_ZONE_RADIUS) , 2))
+                # W = -p2*(alpha + beta)
+            else: # Outside
+                alpha_pecentage = 1 
+                beta_pecentage  = 0
+                # W = -p2*alpha
+            W = -p2 * (alpha*alpha_pecentage + beta*beta_pecentage ) # alpha_pecentage + beta_pecentage = 1 
 
+            # Vel conservation 
             k = Vel_limit / (abs(V) + abs(W))
 
             V = V * k
@@ -151,7 +167,11 @@ class LINEAR_VELOCITY_PLANNER():
 
             #---------------------------------#
             #reached or not 
-            if self.goal_mode == "waypoint" and  r < 0.05 :
+            if self.goal_mode == "waypoint" and  r < TOUCH_ZONE_RADIUS :
+                V = 0 
+                W = 0
+                self.state = "reached"
+            elif self.goal_mode == "goal" and r < TOUCH_ZONE_RADIUS and abs(beta) < TOUCH_ZONE_ANGLE: 
                 V = 0 
                 W = 0
                 self.state = "reached"
