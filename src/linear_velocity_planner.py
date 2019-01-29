@@ -11,13 +11,11 @@ from tf import transformations
 
 #----- Load paramters -----# 
 # foot_print = [[-0.57, 0.36],[0.57, 0.36],[0.57, -0.36],[-0.57, -0.36]]
-p1 = 1
-p2 = 1/0.375 
+p1 = 1 # V, p controller # How much you care about 'r'
+p2 = 1/0.375 # W, p controller # How much you care about 'alpha'
+# p3 = # How much you care about 'beta'
 Vel_limit = 0.7 # Should be in class, modified dynamic.
 IS_ENABLE_MOVE_BACKWORD = True 
-
-
-
 
 # LVP = LINEAR_VELOCITY_PLANNER()
 pub_marker = rospy.Publisher('markers', MarkerArray,queue_size = 1,  latch=False )
@@ -106,7 +104,7 @@ class LINEAR_VELOCITY_PLANNER():
             pass
         elif self.state == "reached":
             rospy.loginfo ("[Linear_velocity_planner] time spend: " + str(time.time() - self.t_start_moving))
-            self.reset() 
+            self.reset()
 
         elif self.state == "moving": 
             #----- Get r , alpha , beta ------# 
@@ -150,7 +148,6 @@ class LINEAR_VELOCITY_PLANNER():
 
             V = V * k
             W = W * k
-
 
             #---------------------------------#
             #reached or not 
