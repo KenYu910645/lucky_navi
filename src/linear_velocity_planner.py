@@ -16,6 +16,13 @@ p2 = 1/0.375 # W, p controller # How much you care about 'alpha'
 # p3 = # How much you care about 'beta'
 Vel_limit = 0.7 # Should be in class, modified dynamic.
 IS_ENABLE_MOVE_BACKWORD = True 
+
+MAX_LINEAR_DEC  = 0.7 # m/s^2
+MAX_ANGULAR_DEC = 0.7 # rad/s^2
+SAFTY_DISTANCE  = 0.1 # m 
+SAFTY_ANGLE     = 0.05
+
+
 TOUCH_ZONE_RADIUS = 0.05 # m 
 TOUCH_ZONE_ANGLE = 0.017 # rad 
 ADJUST_ZONE_RADIUS = 0.20 # m 
@@ -200,7 +207,11 @@ class LINEAR_VELOCITY_PLANNER():
             self.pub_cmd_vel.publish(self.cmd_vel)
         else: 
             pass 
-        
+    
+    def collision_calculation(self):
+        dt_linear  = / + /
+        dt_angular = / + /
+
     def set_point(self, idx ,r ,g ,b ):
         '''
         Set Point at MarkArray 

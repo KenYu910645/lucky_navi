@@ -49,5 +49,5 @@
         <remap from="/robot/current_position" to="/andbot/current_position" />
         <remap from="current_position_euler" to="/andbot/current_position_euler" />
     </node>
-    <node pkg="lucky_navi" type="linear_velocity_planner.py" name="linear_velocity_planner" output="screen"/>
+    <!--node pkg="lucky_navi" type="linear_velocity_planner.py" name="linear_velocity_planner" output="screen"/-->
 </launch>
