@@ -39,6 +39,8 @@ class LINEAR_VELOCITY_PLANNER():
         self.cmd_vel = Twist()
         #----- Counting Star ------# 
         self.t_start_moving = None 
+        # ---- Falgs -------# 
+        self.was_in_touch_zone = False 
 
     def reset (self):
         '''
@@ -52,6 +54,8 @@ class LINEAR_VELOCITY_PLANNER():
         self.markerArray = MarkerArray()
         #----- Counting Star ------# 
         self.t_start_moving = None 
+        # ---- Falgs -------# 
+        self.was_in_touch_zone = False 
 
     def clean_screen (self):
         #------- clean screen -------#
@@ -123,6 +127,9 @@ class LINEAR_VELOCITY_PLANNER():
             goal_yaw = transformations.euler_from_quaternion(self.pose_quaternion_2_list(self.goal.pose.orientation))[2]
             beta = self.angle_substitution(cureent_position_yaw - goal_yaw) # cureent_position_yaw - goal_yaw 
 
+            # Don't make it complicate
+            # theta = self.angle_substitution(goal_yaw - r_yaw) # r_yaw - goal_yaw 
+
             # ------- Check Go Farword or Backword --------#
             linear_direction = 1 
             if IS_ENABLE_MOVE_BACKWORD: 
@@ -144,34 +151,43 @@ class LINEAR_VELOCITY_PLANNER():
             V =  abs(p1*r*math.cos(alpha)) * linear_direction
 
             # Calculate W 
-            if r < TOUCH_ZONE_RADIUS : # Inside touch zone 
+            if r < TOUCH_ZONE_RADIUS or self.was_in_touch_zone: # Inside touch zone 
+                self.was_in_touch_zone = True 
                 alpha_pecentage = 0
                 beta_pecentage  = 1
                 # rospy.loginfo("+++++++++++++++++++++++++++++beta adjustment")
                 # W = -p2*beta
-            elif r < ADJUST_ZONE_RADIUS: # Inside adjust zone 
-                alpha_pecentage = math.pow((ADJUST_ZONE_RADIUS - r) , 2)/math.pow((ADJUST_ZONE_RADIUS - TOUCH_ZONE_RADIUS) , 2)
-                beta_pecentage  = 1 - (math.pow((ADJUST_ZONE_RADIUS - r) , 2)/math.pow((ADJUST_ZONE_RADIUS - TOUCH_ZONE_RADIUS) , 2))
-                # W = -p2*(alpha + beta)
+                '''
+                elif r < ADJUST_ZONE_RADIUS : # Inside adjust zone 
+                    if abs(theta) < math.pi/2:
+                        alpha_pecentage = math.pow((ADJUST_ZONE_RADIUS - r) , 2)/math.pow((ADJUST_ZONE_RADIUS - TOUCH_ZONE_RADIUS) , 2)
+                        beta_pecentage  = 1 - (math.pow((ADJUST_ZONE_RADIUS - r) , 2)/math.pow((ADJUST_ZONE_RADIUS - TOUCH_ZONE_RADIUS) , 2))
+                    else: 
+                        alpha_pecentage = 1 
+                        beta_pecentage  = 0
+                '''
             else: # Outside
                 alpha_pecentage = 1 
                 beta_pecentage  = 0
                 # W = -p2*alpha
             W = -p2 * (alpha*alpha_pecentage + beta*beta_pecentage ) # alpha_pecentage + beta_pecentage = 1 
 
-            # Vel conservation 
-            k = Vel_limit / (abs(V) + abs(W))
-
-            V = V * k
-            W = W * k
+            # Vel conservation
+            
+            if (abs(V) + abs(W)) > Vel_limit:
+                k = Vel_limit / (abs(V) + abs(W))
+                V = V * k
+                W = W * k
+            else: # Allow slower Vel
+                pass 
 
             #---------------------------------#
             #reached or not 
-            if self.goal_mode == "waypoint" and  r < TOUCH_ZONE_RADIUS :
+            if self.goal_mode == "waypoint" and self.was_in_touch_zone :
                 V = 0 
                 W = 0
                 self.state = "reached"
-            elif self.goal_mode == "goal" and r < TOUCH_ZONE_RADIUS and abs(beta) < TOUCH_ZONE_ANGLE: 
+            elif self.goal_mode == "goal" and self.was_in_touch_zone and abs(beta) < TOUCH_ZONE_ANGLE: 
                 V = 0 
                 W = 0
                 self.state = "reached"

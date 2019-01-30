@@ -2,13 +2,16 @@
 import time
 import math
 from nav_msgs.msg import OccupancyGrid # Global map 
-from geometry_msgs.msg import PoseArray, PoseStamped, Pose2D, Pose   # Global path 
+from geometry_msgs.msg import PoseArray, PoseStamped, Pose2D, Pose,PoseWithCovarianceStamped   # Global path 
 from radius_table import radius_table
 from global_cartographer import GLOBAL_CARTOGRAPHER
 import rospy 
 import sys 
 from visualization_msgs.msg import Marker, MarkerArray # Debug drawing 
+from tf import transformations
 
+#----- Flags ------# 
+DEBUG_DRAW_A_START_SET = False  
 
 #----- Load paramters -----# 
 foot_print = [[-0.57, 0.36],[0.57, 0.36],[0.57, -0.36],[-0.57, -0.36]]
@@ -44,7 +47,7 @@ class GLOBAL_PLANNER():
         #----- Global path -------#
         self.global_path = PoseArray()
         #----- Current Pose ------# TODO re-get 
-        self.current_position = Pose2D()
+        # self.current_position = Pose2D()
 
         #------ Goal ---------#
         self.navi_goal = None # idx
@@ -58,8 +61,6 @@ class GLOBAL_PLANNER():
         self.is_need_pub = False 
         self.clean_screen()
 
-
-
     def clean_screen (self):
         #------- clean screen -------#
         marker = Marker()
@@ -70,7 +71,13 @@ class GLOBAL_PLANNER():
 
         #------- Debug draw -------# 
         self.markerArray = MarkerArray()
-
+    
+    def initial_pose_goal_CB(self, init_pose):
+        rospy.loginfo("Current_position : " + str(init_pose))
+        self.current_position.x = init_pose.pose.pose.position.x
+        self.current_position.y = init_pose.pose.pose.position.y
+        self.current_position.theta = transformations.euler_from_quaternion(self.pose_quaternion_2_list(init_pose.pose.pose.orientation))[2]
+    
     def move_base_simple_goal_CB(self, navi_goal):
         rospy.loginfo("Target : " + str(navi_goal))
         self.reset()
@@ -78,7 +85,14 @@ class GLOBAL_PLANNER():
         t_start = time.time()
         self.plan_do_it()
         rospy.loginfo("[A*] time spend: " + str(time.time() - t_start))
-    
+
+    def pose_quaternion_2_list(self, quaternion):
+        """
+        This function help transfer the geometry_msgs.msg.PoseStameped 
+        into (translation, quaternion) <-- lists
+        """
+        return [quaternion.x, quaternion.y, quaternion.z, quaternion.w]
+
     def plan_do_it(self):
         '''
         Time Loop
@@ -106,9 +120,13 @@ class GLOBAL_PLANNER():
                 rospy.loginfo("[A*] arrive goal !!")
                 is_finish_plan = True 
                 break
+            elif x == -1 : 
+                rospy.loginfo("[A*] Can't find lowest set.")
+                continue
             
             # Debug
-            #self.set_point(x, 210, 188 , 167)
+            if DEBUG_DRAW_A_START_SET:
+                self.set_point(x, 210, 188 , 167)
             x_count = 0
             #Find neighbor of X 
             for y in self.neighbor(x):
@@ -120,9 +138,8 @@ class GLOBAL_PLANNER():
                     x_count += 1
                 else: 
                     tentative_g_score = self.g_score[x] + self.neighbor_dist(x,y) + self.neighbor_delta_cost(x ,y) * 0.1  # Cost: y -x (0 ~ 100)
-
                     try: 
-                        if tentative_g_score < self.g_score[y]: 
+                        if tentative_g_score < self.g_score[y]:
                             self.came_from[y] = x            #y is key, x is value//make y become child of X 
                             self.g_score[y] = tentative_g_score
                             self.openset[y] = self.g_score[y] + self.goal_dis_est(y, self.navi_goal)
@@ -130,11 +147,13 @@ class GLOBAL_PLANNER():
                         self.came_from[y] = x            #y is key, x is value//make y become child of X 
                         self.g_score[y] = tentative_g_score
                         self.openset[y] = self.g_score[y] + self.goal_dis_est(y, self.navi_goal)
-                        #---------- Debug ---------# 
-                        #self.set_point(y, 255, 255 , 0)
+                        #---------- Debug ---------#
+                        if DEBUG_DRAW_A_START_SET:
+                            self.set_point(y, 255, 255 , 0)
             self.closedset[x] = x_count  #add x to closedset 
             del self.openset[x] # remove x from openset
-            # pub_marker.publish(self.markerArray)
+            #if DEBUG_DRAW_A_START_SET:
+            #   pub_marker.publish(self.markerArray)
         
         #----------------- Publish Path----------------#
         p = self.navi_goal
@@ -153,6 +172,7 @@ class GLOBAL_PLANNER():
 
     def neighbor_delta_cost(self, x ,y):
         #
+        rospy.loginfo("y : " + str(y))
         if GC.global_costmap.data[y] >= 99:
             return float("inf")
         else: 
@@ -229,7 +249,7 @@ class GLOBAL_PLANNER():
         #----------------- Boundary check ---------------# 
         ans_wihtout_exceed_boundary = list()
         for i in ans:
-            if i >= 0 or i < GC.width * GC.height : # illegal range 
+            if i >= 0 or i < (GC.width-1) * (GC.height-1) : # illegal range 
                 ans_wihtout_exceed_boundary.append(i)
         return ans_wihtout_exceed_boundary
     
@@ -299,6 +319,7 @@ def main(args):
     rospy.Subscriber('/map', OccupancyGrid, GC.global_map_CB)
     # rospy.Subscriber('/current_position', OccupancyGrid, global_planner.current_position_CB) # Use TF to get it. 
     rospy.Subscriber('/move_base_simple/goal', PoseStamped, global_planner.move_base_simple_goal_CB)
+    rospy.Subscriber('/initialpose', PoseWithCovarianceStamped, global_planner.initial_pose_goal_CB)
     
     pub_global_costmap = rospy.Publisher('global_costmap', OccupancyGrid ,queue_size = 10,  latch=True)
     pub_global_path = rospy.Publisher('global_path', PoseArray ,queue_size = 10,  latch=False)
