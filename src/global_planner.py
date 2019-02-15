@@ -131,7 +131,7 @@ class GLOBAL_PLANNER():
             #Find neighbor of X 
             for y in self.neighbor(x):
                 if y in self.closedset: # if y is already closed
-                    if self.closedset[y] < 8:   
+                    if self.closedset[y] < 8:
                         self.closedset[y] += 1 # X is going to be closedset
                     elif self.closedset[y] >= 8: # Can get rid of y  
                         del self.closedset[y]

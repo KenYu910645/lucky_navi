@@ -85,7 +85,6 @@ class LINEAR_VELOCITY_PLANNER():
         self.t_start_moving  = time.time()
     
     def current_position_CB(self, current_position):
-        # print ("Current Position : " + str(current_position))
         self.current_position = current_position
 
     def sign (self, x):
@@ -209,8 +208,9 @@ class LINEAR_VELOCITY_PLANNER():
             pass 
     
     def collision_calculation(self):
-        dt_linear  = / + /
-        dt_angular = / + /
+        pass 
+        #dt_linear  = / + /
+        #dt_angular = / + /
 
     def set_point(self, idx ,r ,g ,b ):
         '''
@@ -249,6 +249,7 @@ def main(args):
     rospy.init_node('linear_velocity_planner', anonymous=True)
     rospy.Subscriber('/move_base_simple/goal', PoseStamped, LVP.move_base_simple_goal_CB) # TODO for testing 
     rospy.Subscriber('/current_position', PoseStamped, LVP.current_position_CB) 
+
 
     r = rospy.Rate(10)#call at 10HZ
     while (not rospy.is_shutdown()):
