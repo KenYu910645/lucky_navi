@@ -30,8 +30,7 @@ class GLOBAL_CARTOGRAPHER():
         print ("Width: " + str(self.width))
         print ("Height: " + str(self.height))
         self.global_costmap.header = map.header 
-        self.global_costmap.info = map.info 
-
+        self.global_costmap.info = map.info
 
         # ----- Init Global_costmap -----# 
         t_init_start = time.time()

@@ -35,7 +35,7 @@ class LINEAR_VELOCITY_PLANNER():
         #----- Current Pose ------# 
         self.current_position = PoseStamped()
         # ---- Current Goal ------# 
-        self.goal = PoseStamped()
+        self.goal = Pose2D() # PoseStamped()
         self.goal_mode = "goal"# "waypoint" # 
         # ---- State Machine -----#
         self.state = "stand_by" # "abort", "timeout" , "moving"
@@ -54,7 +54,7 @@ class LINEAR_VELOCITY_PLANNER():
         Clean Current Task , and reset to init.
         '''
         # ---- Current Goal ------# 
-        self.goal = PoseStamped()
+        self.goal = Pose2D() # PoseStamped()
         # ---- State Machine -----#
         self.state = "stand_by" # "abort", "timeout" , "moving"
         #------- #
@@ -75,15 +75,20 @@ class LINEAR_VELOCITY_PLANNER():
         #------- Debug draw -------# 
         self.markerArray = MarkerArray()
 
-    def move_base_simple_goal_CB(self, goal):
+    def goal_CB(self, goal):
         rospy.loginfo ("Target : " + str(goal))
-        self.goal = goal # TODO Check Valid Goal, or the goal is already reached.
+
+        #(self.goal.x, self.goal.y)  = (goal.pose.position.x , goal.pose.position.y ) 
+        #self.goal.theta = transformations.euler_from_quaternion(self.pose_quaternion_2_list(goal.pose.orientation))[2]
+        self.goal = goal 
         self.state = "moving"
         # TODO Do something.
         #self.reset()
         #self.navi_goal = self.XY2idx((navi_goal.pose.position.x, navi_goal.pose.position.y))
         self.t_start_moving  = time.time()
+
     
+
     def current_position_CB(self, current_position):
         self.current_position = current_position
 
@@ -121,8 +126,10 @@ class LINEAR_VELOCITY_PLANNER():
 
         elif self.state == "moving": 
             #----- Get r , alpha , beta ------# 
-            pos_dx = self.goal.pose.position.x - self.current_position.pose.position.x
-            pos_dy = self.goal.pose.position.y - self.current_position.pose.position.y
+            # pos_dx = self.goal.pose.position.x - self.current_position.pose.position.x
+            # pos_dy = self.goal.pose.position.y - self.current_position.pose.position.y
+            pos_dx = self.goal.x - self.current_position.pose.position.x
+            pos_dy = self.goal.y - self.current_position.pose.position.y
             r = math.sqrt(pos_dx*pos_dx + pos_dy*pos_dy)
 
             r_yaw = math.atan2(pos_dy, pos_dx)
@@ -130,7 +137,7 @@ class LINEAR_VELOCITY_PLANNER():
             cureent_position_yaw = transformations.euler_from_quaternion(self.pose_quaternion_2_list(self.current_position.pose.orientation))[2]
             alpha = self.angle_substitution(cureent_position_yaw - r_yaw)
 
-            goal_yaw = transformations.euler_from_quaternion(self.pose_quaternion_2_list(self.goal.pose.orientation))[2]
+            goal_yaw = self.goal.theta # transformations.euler_from_quaternion(self.pose_quaternion_2_list(self.goal.pose.orientation))[2]
             beta = self.angle_substitution(cureent_position_yaw - goal_yaw) # cureent_position_yaw - goal_yaw 
 
             # Don't make it complicate
@@ -247,7 +254,7 @@ LVP = LINEAR_VELOCITY_PLANNER()
 def main(args):
     #----- Init node ------# 
     rospy.init_node('linear_velocity_planner', anonymous=True)
-    rospy.Subscriber('/move_base_simple/goal', PoseStamped, LVP.move_base_simple_goal_CB) # TODO for testing 
+    rospy.Subscriber('/lucky_navi/goal', Pose2D , LVP.goal_CB) # TODO for testing 
     rospy.Subscriber('/current_position', PoseStamped, LVP.current_position_CB) 
 
 

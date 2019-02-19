@@ -15,8 +15,11 @@ MAX_SEARCH_RADIUS = 1   # m
 MIN_SEARCH_RADIUS = 0.1 # m
 SEARCH_RADIUS_RESOLUTION = 0.1 # m 
 SERACH_ANGULAR_RESOLUTION = 0.017 # Rad 
+FIX_PLAN_RADIUS = 1 # m
+MAX_CANDIDATE_PATH_SEARCH = 50 # times
 
 pub_marker = rospy.Publisher('markers', MarkerArray,queue_size = 1,  latch=False )
+pub_goal = rospy.Publisher('/lucky_navi/goal',  Pose2D ,queue_size = 10,  latch=True)
 
 # Tmp 
 idx = 0
@@ -29,9 +32,9 @@ GC = GLOBAL_CARTOGRAPHER(foot_print)
 class POLAR_COORDINATE_PLANNER():
     def __init__(self):
         self.state = "stand_by" # planning # finish 
-        self.goal = None 
-        self.current_position = None
-        self.path = PoseArray()
+        self.goal = Pose2D() 
+        self.current_position = Pose2D()
+        # self.path = PoseArray()
         # For debug
         self.markerArray = MarkerArray()
         # 
@@ -44,66 +47,149 @@ class POLAR_COORDINATE_PLANNER():
             # Debug Clean screen 
             self.clean_screen()
             # 
-            dis_pos_2_goal = self.getDis2Goal(self.current_position.pose.position.x ,self.current_position.pose.position.y)
-            current_position_yaw = transformations.euler_from_quaternion(self.pose_quaternion_2_list(self.current_position.pose.orientation))[2]
+            dis_pos_2_goal = self.getDis2Goal(self.current_position)
+            # current_position_yaw = transformations.euler_from_quaternion(self.pose_quaternion_2_list(self.current_position.pose.orientation))[2]
+            
+            #------ Min obstacle Test -------# 
+            candidate_list = []
+            min_obstacle_dis = self.get_min_obstacle_dis()
+            if dis_pos_2_goal >= min_obstacle_dis:
+                candidate_list.append(self.get_best_next_step(self.current_position, min_obstacle_dis))
+            else: 
+                candidate_list.append(self.get_best_next_step(self.current_position, dis_pos_2_goal))
+            self.set_point(candidate_list[-1][0].x,candidate_list[-1][0].y,255,0,0, size = 0.05)
 
+            '''
             # ------ GEt candidate list ---------# 
-            candidate_list = [] # [(x1,y1), (x2, y2), .... , (x10, y10)]
-            for i in range (int((MAX_SEARCH_RADIUS - MIN_SEARCH_RADIUS) / SEARCH_RADIUS_RESOLUTION  + 1 )):
+            candidate_list = [] # [[Pose2D_1 , score_1], [Pose2D_1 , score_1], .... , [Pose2D_10, score_10]]
+            # for i in range (int((MAX_SEARCH_RADIUS - MIN_SEARCH_RADIUS) / SEARCH_RADIUS_RESOLUTION  + 1 )): # TODO This is a test 
+            for i in range (int((dis_pos_2_goal - MIN_SEARCH_RADIUS) / SEARCH_RADIUS_RESOLUTION  + 1 )):
                 search_radius = MIN_SEARCH_RADIUS + i * SEARCH_RADIUS_RESOLUTION
-                # print ("search_radius: " + str(search_radius)) 
-                candidate = None 
-                candidate_score = -1 
-                for i in range (int(math.pi*2 / SERACH_ANGULAR_RESOLUTION + 1)):
-                    ang = i * SERACH_ANGULAR_RESOLUTION
-                    # print ("ang: " + str(ang)) 
-                    (x,y) = (self.current_position.pose.position.x + search_radius*math.cos(ang) , self.current_position.pose.position.y + search_radius*math.sin(ang)) 
+                candidate_list.append(self.get_best_next_step(self.current_position, search_radius))
+                self.set_point(candidate_list[-1][0].x,candidate_list[-1][0].y,255,0,0, size = 0.05)
+            '''
+            
+            '''
+            # ------ Get candidate path  --------# 
+            for candidate in candidate_list:
+                candidate_path = [candidate] # Pose2D 
+                while len(candidate_path) < MAX_CANDIDATE_PATH_SEARCH:
+                    dis_pos_2_goal = self.getDis2Goal(candidate_path[-1][0])
+                    next_step = [Pose2D(), -1]
                     
-                    tmp_cost = 100 - GC.global_costmap.data[self.XY2idx((x,y))] # 0~100
-                    
-                    #----- Get tmp_dist  ------#
-                    #  tmp_dist = self.getDis2Goal(x,y) * 50 / dis_pos_2_goal # 
-                    if dis_pos_2_goal >= search_radius: 
-                        tmp_dist = (-50.0 / search_radius) * self.getDis2Goal(x,y) + 50*(dis_pos_2_goal + search_radius) / search_radius
-                    else: 
-                        tmp_dist = (-100 / (dis_pos_2_goal+search_radius)) * self.getDis2Goal(x,y) + 100 
-
-                    #----- Get tmp_turn  ------# 
-                    dtheta = abs(self.angle_substitution(ang - current_position_yaw))
-                    tmp_turn = 100 * (1 - dtheta / (math.pi / 2))
-                    if dtheta >= math.pi/2:  # TODO TODO Not enable assign backward
-                        tmp_turn = 0 
-                    
-                    # print ("tmp_turn: " + str(tmp_turn) )
-                    tmp_score = tmp_cost + tmp_dist + tmp_turn*0.5
-                    self.set_point(x,y,255*(tmp_turn/100.0),255*(tmp_turn/100.0),255*(tmp_turn/100.0))
-                    print ("tmp_score: " + str(round(tmp_score))  + " = " + str(round(tmp_cost)) + " + " + str(round(tmp_dist)) + " + " + str(round(tmp_turn)))
-                    if tmp_score > candidate_score:
-                        candidate = (x,y)
-                        candidate_score = tmp_score 
-                self.set_point(candidate[0],candidate[1],255,0,0, size = 0.05)
-                candidate_list.append(candidate)
-
-
+                    # Check arrived 
+                    if dis_pos_2_goal <= FIX_PLAN_RADIUS: 
+                        rospy.loginfo("ARRIVED")
+                        # candidate_path.append() # TODO goal pose2D 
+                        break 
+                    next_step = self.get_best_next_step(candidate_path[-1][0], FIX_PLAN_RADIUS)
+                    #---- Add candidate Path ------# 
+                    self.set_point(next_step[0].x,next_step[0].y,0,255,0, size = 0.03)
+                    candidate_path.append(next_step)
+            '''
+            
             pub_marker.publish(self.markerArray)
-            self.state = "stand_by"
+
+
+            # GOGO PULBISH
+            pub_goal.publish(candidate_list[-1][0])
+            # self.state = "finish"
+            if dis_pos_2_goal < 0.05 : 
+                self.state = "finish"
+
         elif self.state == "finish":
-            pass 
+            print ("Planning Take : " + str(time.time() - self.t_start_moving) + " sec.")
+            self.t_start_moving = None 
+            self.state = "stand_by"
+             
+    
+    def get_min_obstacle_dis(self):
+        '''
+        This is a test function 
+        Go kill some ZED
+        '''
+        RESOLUTION = 0.05 
+        r = RESOLUTION # Resulution is 0.05 too.
+        while r <= 8 :  
+            for i in range(720): # 0.5 degree 
+
+                tmp = Pose2D()
+                tmp.theta = i * (math.pi/360)
+                (tmp.x, tmp.y) = (self.current_position.x + r*math.cos(tmp.theta) 
+                                 ,self.current_position.y + r*math.sin(tmp.theta))
+
+                tmp_cost = GC.global_costmap.data[self.XY2idx((tmp.x,tmp.y))]
+                
+                if tmp_cost == 100 : 
+                    print ("GET MIN OBSTACLE AT : " + str(r))
+                    return r 
+            r += RESOLUTION 
+            
         
+    def get_best_next_step (self, input_pose , r):
+        '''
+        Calculate "pose" surrunding 360 degree , best nest step 
+        Input : 
+                pose - (Pose2D) where you want to start finding next step 
+                r - search radius 
+        Output : 
+                next_step - [Pose2D_1 , score_1]
+        '''
+        next_step = [Pose2D(), -1] # [[Pose2D_1 , score_1], 
+
+        for j in range (int(math.pi*2 / SERACH_ANGULAR_RESOLUTION + 1)): # 0~360
+            tmp = Pose2D()
+            tmp.theta = j * SERACH_ANGULAR_RESOLUTION
+            (tmp.x, tmp.y) = (input_pose.x + r*math.cos(tmp.theta) 
+                             ,input_pose.y + r*math.sin(tmp.theta))
+            
+            dis_pos_2_goal = self.getDis2Goal(input_pose)
+            
+            tmp_cost = 100 - GC.global_costmap.data[self.XY2idx((tmp.x,tmp.y))] # 0~100
+            
+            #----- Get tmp_dist  ------#
+            #  tmp_dist = self.getDis2Goal(x,y) * 50 / dis_pos_2_goal # 
+            if dis_pos_2_goal >= r: 
+                tmp_dist = (-50.0 / r) * self.getDis2Goal(tmp) + 50*(dis_pos_2_goal + r) / r
+            else: 
+                tmp_dist = (-100 / (dis_pos_2_goal+r)) * self.getDis2Goal(tmp) + 100 
+
+            #----- Get tmp_turn  ------# 
+            dtheta = abs(self.angle_substitution(tmp.theta  - input_pose.theta))
+            tmp_turn = 100 * (1 - dtheta / (math.pi / 2))
+            if dtheta >= math.pi/2:  # TODO TODO Not enable assign backward
+                tmp_turn = 0 
+            
+            # print ("tmp_turn: " + str(tmp_turn) )
+            tmp_score = tmp_cost*0.3 + tmp_dist + tmp_turn*0.3
+
+            self.set_point(tmp.x , tmp.y ,255*(tmp_turn/100.0),255*(tmp_turn/100.0),255*(tmp_turn/100.0))
+
+            # print ("tmp_score: " + str(round(tmp_score))  + " = " + str(round(tmp_cost)) + " + " + str(round(tmp_dist)) + " + " + str(round(tmp_turn)))
+            if tmp_score > next_step[1] :
+                next_step[0] = tmp 
+                #(candidate.x, candidate.y) = (x,y)
+                #candidate.theta = ang 
+                next_step[1] = tmp_score
+        return next_step 
+
+    
     def pose_quaternion_2_list(self, quaternion):
         """
         This function help transfer the geometry_msgs.msg.PoseStameped 
         into (translation, quaternion) <-- lists
         """
         return [quaternion.x, quaternion.y, quaternion.z, quaternion.w]
+    
     def sign (self, x):
-        if x >= 0: 
+        if x >= 0:
             return 1
         else: 
             return -1 
+        
     def angle_substitution(self, ang):
         '''
-        Make sure  ang is 0 ~ pi/2 or -0 ~ -pi/2 
+        Make sure  ang is 0 ~ pi/2 or -0 ~ -pi/2  # rad 
         '''
         ans = (abs(ang) % (2* math.pi)) * self.sign(ang) # Make sure not ot exceed 360
 
@@ -116,14 +202,21 @@ class POLAR_COORDINATE_PLANNER():
             pass 
         return ans 
 
-    def getDis2Goal(self, x,y):
-        dx = self.goal.pose.position.x - x 
-        dy = self.goal.pose.position.y - y
+    def getDis2Goal(self, n):
+        '''
+        Get Euclidean distance between n and goal. (which both are Pose2D)
+        '''
+        dx = self.goal.x - n.x 
+        dy = self.goal.y - n.y
         return math.sqrt(dx*dx + dy*dy)
     
     def move_base_simple_goal_CB(self, goal):
         rospy.loginfo ("Target : " + str(goal))
-        self.goal = goal # TODO Check Valid Goal, or the goal is already reached.
+        # self.goal = goal # TODO Check Valid Goal, or the goal is already reached.
+        (self.goal.x, self.goal.y)  = (goal.pose.position.x , goal.pose.position.y ) 
+        self.goal.theta = transformations.euler_from_quaternion(self.pose_quaternion_2_list(goal.pose.orientation))[2]
+
+
         self.state = "planning"
         # TODO Do something.
         #self.reset()
@@ -131,7 +224,9 @@ class POLAR_COORDINATE_PLANNER():
         self.t_start_moving  = time.time()
     
     def current_position_CB(self, current_position):
-        self.current_position = current_position
+        # self.current_position = current_position
+        (self.current_position.x, self.current_position.y)  = (current_position.pose.position.x , current_position.pose.position.y ) 
+        self.current_position.theta = transformations.euler_from_quaternion(self.pose_quaternion_2_list(current_position.pose.orientation))[2]
 
 
     def set_point(self, x,y ,r ,g ,b , size = 0.02):
@@ -192,9 +287,11 @@ def main(args):
     rospy.Subscriber('/move_base_simple/goal', PoseStamped, PCP.move_base_simple_goal_CB) # TODO for testing 
     rospy.Subscriber('/current_position', PoseStamped, PCP.current_position_CB) 
     pub_global_costmap = rospy.Publisher('global_costmap', OccupancyGrid ,queue_size = 10,  latch=True)
+    
+    
     rospy.Subscriber('/map', OccupancyGrid, GC.global_map_CB)
 
-    r = rospy.Rate(10)#call at 10HZ
+    r = rospy.Rate(10)#call at 1HZ # TODO Test  
     while (not rospy.is_shutdown()):
         if GC.is_need_pub: 
             pub_global_costmap.publish(GC.global_costmap)
