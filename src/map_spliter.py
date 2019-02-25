@@ -2,7 +2,6 @@
 import time
 import math
 from nav_msgs.msg import OccupancyGrid
-# from radius_table import radius_table
 import rospy 
 import sys 
 from visualization_msgs.msg import Marker, MarkerArray # Debug drawing 
@@ -20,9 +19,10 @@ class MAP_SPLITER():
         self.height = None 
         #--- output map -----# 
         self.map_split = OccupancyGrid() # Output 
+        self.map = OccupancyGrid() # Input  
         #----- debug ------# 
         self.markerArray = MarkerArray()
-        #self.map = None 
+        
 
     def global_map_CB(self, map):
         t_start = time.time()
@@ -121,10 +121,10 @@ class MAP_SPLITER():
 
         #--- End finding coner and edge -----# 
         
-        pub_marker.publish(self.markerArray)
-        # pub_map_split.publish(self.map_split)
+        # pub_marker.publish(self.markerArray)
 
-        aux_corner_list = self.get_aux_coner()
+        # ---- Find aux corner
+        aux_corner_list = self.get_aux_corner()
 
         # --- update aux corner to map_split -----# 
         new_map = OccupancyGrid() # Output 
@@ -141,9 +141,9 @@ class MAP_SPLITER():
         rospy.loginfo("[MS] Total take " + str(time.time() - t_start) + " sec.")
 
 
-    def get_aux_coner(self):
+    def get_aux_corner(self):
         '''
-        Find aux coner that help split map 
+        Find aux corner that help split map 
         extend contours slope at coners , 
         '''
         aux_corner_list = []
@@ -178,24 +178,14 @@ class MAP_SPLITER():
                 for i in self.extend_slope(discover_coner_list):
                     print (str(i))
                     aux_corner_list.append(i)
-                # print ("aux_corner_list : " + str(aux_corner_list))
         return aux_corner_list
-
-
-
-
-            
-
-                    
-
-                                
-
-
 
     def extend_slope (self,discover_coner_list):
         '''
         Input : 
-            discover_coner_list = [corner_ori , corner_1 , corner_2]
+            discover_coner_list = [corner_ori , corner_1 , corner_2] (idx)
+        Output : 
+            ans = [aux_corner_1, aux_corner_2] (idx), len is not fix
         '''
         ans = []
         for t in range(2):
@@ -203,6 +193,7 @@ class MAP_SPLITER():
             vertex_start = discover_coner_list[t+1]
             (x_end, y_end) = self.idx2XY(vertex_end)
             (x_start, y_start) = self.idx2XY(vertex_start)
+
             #####################################
             ###   Bresenham's line algorithm  ###
             #####################################
@@ -215,12 +206,10 @@ class MAP_SPLITER():
             deltaerr = abs(deltay / deltax) # slope
             error = 0.0 # No error at start
 
-
             # Start extend slope 
 
             if deltaerr <= 1: # 0~45 degree
                 y = y_end # vertex_start.y
-                # for i in range(int(round(abs(deltax) / self.resolution, 0))):
                 i = 1
                 while True: 
                     x = x_end + i * self.resolution * self.sign(deltax)
@@ -244,7 +233,6 @@ class MAP_SPLITER():
                 x = x_end # vertex_start.x
                 deltaerr = 1 / deltaerr
                 i = 1
-                # for i in range(int(round(abs(deltay) / self.resolution, 0))):
                 while True : 
                     y = y_end + i * self.resolution * self.sign(deltay)
 
@@ -272,8 +260,6 @@ class MAP_SPLITER():
         else :
             return 1
 
-
-
     def list_compare(self, a , b ): 
         '''
         Note that a, b list should have same len
@@ -291,8 +277,6 @@ class MAP_SPLITER():
                 else: 
                     return False 
         return True  
-
-            
 
     def set_point(self, x,y ,r ,g ,b , size = 0.02):
         '''
