@@ -18,12 +18,11 @@ class MAP_SPLITER():
         self.width = None 
         self.height = None 
         #--- output map -----# 
-        self.map_split = OccupancyGrid() # Output 
+        self.map_split = [] # OccupancyGrid() # Output 
         self.map = OccupancyGrid() # Input  
         #----- debug ------# 
         self.markerArray = MarkerArray()
         
-
     def global_map_CB(self, map):
         t_start = time.time()
         self.resolution = map.info.resolution
@@ -33,8 +32,8 @@ class MAP_SPLITER():
         print ("Width: " + str(self.width))
         print ("Height: " + str(self.height))
         self.map = map 
-        self.map_split.info = map.info
-        self.map_split.header = map.header
+        # self.map_split.info = map.info
+        # self.map_split.header = map.header
 
         # --- Find coner ------#
         for ori_map_pixel in range(len(map.data)):
@@ -137,9 +136,114 @@ class MAP_SPLITER():
                 new_map.data.append(self.map_split.data[i])
         self.map_split = new_map
 
+        open_edge = [[1437, 1443]] # edge that still need to explore # [[corner_1 ,corner_2] , [corner_3, corner_4]]
+        #self.set_point(self.idx2XY(open_edge[0][0])[0],self.idx2XY(open_edge[0][0])[1],0,255,255, size = 0.05)
+        #self.set_point(self.idx2XY(open_edge[0][1])[0],self.idx2XY(open_edge[0][1])[1],0,255,255, size = 0.05)
+        # print (self.reachability_test(self.idx2XY(393) , self.idx2XY(417)))
+
+        
+        while len(open_edge) != 0:
+            bottom_edge = open_edge.pop(0) # FIFO
+            bottom_edge_slope = self.get_slope(self.idx2XY(bottom_edge[0]), self.idx2XY(bottom_edge[1]))
+            normal_slope = -1.0 / bottom_edge_slope
+            print ("normal_slope : " + str(normal_slope))
+            # ------- Get bottom_edge_expand_list --------# 
+            # dx = self.idx2XY(bottom_edge[1])[0]  - self.idx2XY(bottom_edge[0])[0]
+            # print (str(self.sign(dx)))
+            bottom_edge_expand_list = self.bresenham_line(self.idx2XY(bottom_edge[0]) , end_point=self.idx2XY(bottom_edge[1]))
+            bottom_edge_expand_list.append(self.idx2XY(bottom_edge[0]))
+            
+            print (bottom_edge_expand_list)
+            for i in bottom_edge_expand_list:
+                self.set_point(i[0],i[1],0,255,255, size = 0.05)
+
+
+            # ------ GEt posible_votex-list --------# 
+            posible_votex_list = []
+            for i in bottom_edge_expand_list:
+                normal_line_list = self.bresenham_line(i , normal_slope, 1 , self.judgement_function_3)
+                if len(normal_line_list) == 1 : 
+                    normal_line_list = self.bresenham_line(i , normal_slope, -1 , self.judgement_function_3)
+                
+                for j in normal_line_list:
+                    if self.map_split.data[self.XY2idx(j)] == 100: # Find corner
+                        posible_votex_list.append(j)
+            print ("")
+            print ("posible_votex_list : " + str(posible_votex_list))
+
+
+
+            votex = posible_votex_list[0]
+            # print ("bottom_edge : " + str(bottom_edge))
+            # print self.reachability_test(posible_votex_list[0], self.idx2XY(bottom_edge[1]))
+            
+            # Find a valid votex 
+            votex = None
+            for i in posible_votex_list:
+                if self.reachability_test(i, self.idx2XY(bottom_edge[0])) and self.reachability_test(i, self.idx2XY(bottom_edge[1])):
+                    votex = i
+                    break
+            
+
+            print ("votex : " + str(votex))
+            if votex == None:
+                print ("VOTEX NOT FOUND!!")
+            else: 
+                self.set_point(votex[0],votex[1],255,255,255, size = 0.05)
+                pub_marker.publish(self.markerArray)
+
+            '''
+            # indicate boarder 
+            # boarder = [self.idx2XY(bottom_edge[0]), self.idx2XY(bottom_edge[0]), votex] # (x,y)
+            number = 10 
+            for i in bottom_edge_expand_list: 
+                if self.map_split.data[bottom_edge_expand_list] = 
+
+            for i in bottom_edge: 
+                self.bresenham_line(self.idx2XY(i) , votex)
+            '''
+            
+        
         pub_map_split.publish(self.map_split)
+        pub_marker.publish(self.markerArray)
+
         rospy.loginfo("[MS] Total take " + str(time.time() - t_start) + " sec.")
 
+    def reachability_test(self, corner_1, corner_2):
+        '''
+        check there're not obstacle between corner_1 and corner_2 on map_split
+        Input:
+            corner_1(turple - (x,y))
+            corner_2(turple - (x,y))
+        Output : 
+            True : reachable 
+            False : unreachable 
+        '''
+        # slope = self.get_slope(corner_1, corner_2)
+        #print ("slope : " + str(slope))
+        #print ("corner_1 : " + str(corner_1))
+        #print ("corner_2 : " + str(corner_2))
+
+        # dx = corner_2[0] - corner_1[0]
+        #print ("dx : "+ str(dx)) 
+        print ("corner_1 : " + str(corner_1))
+        print ("corner_2 : " + str(corner_2))
+        line = self.bresenham_line(corner_1 , end_point=corner_2)
+        
+        
+        # Debug 
+        for i in line:
+            if self.map_split.data[self.XY2idx(i)] == 87: 
+                self.set_point (i[0],i[1],255,0,0, size = 0.05)
+            else: 
+                self.set_point (i[0],i[1],0,255,255, size = 0.05)
+        pub_marker.publish(self.markerArray)
+        
+
+        for i in line:
+            if self.map_split.data[self.XY2idx(i)] == 87:
+                return False 
+        return True 
 
     def get_aux_corner(self):
         '''
@@ -179,7 +283,27 @@ class MAP_SPLITER():
                     print (str(i))
                     aux_corner_list.append(i)
         return aux_corner_list
-
+    
+    def get_slope(self, start_point , end_point):
+        '''
+        Given two points, get slope.
+        Input : 
+            start_point : (x,y) - tuple
+            end_point = (x,y) - tuple 
+        Output : 
+            return slope - float
+        '''
+        deltax = end_point[0] - start_point[0]
+        deltay = end_point[1] - start_point[1]
+        print ("dx : " + str(deltax))
+        print ("dy : " + str(deltay))
+        if deltax == 0: # To avoid inf slope
+            deltax = 0.0000001
+        if deltay == 0: # To avoid 0 slope
+            deltay = 0.0000001
+        deltaerr = (deltay / deltax) # slope
+        return deltaerr
+    
     def extend_slope (self,discover_coner_list):
         '''
         Input : 
@@ -193,66 +317,125 @@ class MAP_SPLITER():
             vertex_start = discover_coner_list[t+1]
             (x_end, y_end) = self.idx2XY(vertex_end)
             (x_start, y_start) = self.idx2XY(vertex_start)
-
-            #####################################
-            ###   Bresenham's line algorithm  ###
-            #####################################
-            # ------ Find slope ---------# 
+            
+            slope  = self.get_slope(self.idx2XY(vertex_start), self.idx2XY(vertex_end))
             deltax = x_end - x_start
-            deltay = y_end - y_start
-            if deltax == 0: # To avoid inf slope
-                deltax = 0.01
-
-            deltaerr = abs(deltay / deltax) # slope
-            error = 0.0 # No error at start
-
-            # Start extend slope 
-
-            if deltaerr <= 1: # 0~45 degree
-                y = y_end # vertex_start.y
-                i = 1
-                while True: 
-                    x = x_end + i * self.resolution * self.sign(deltax)
-                    idx = self.XY2idx((x,y))
-                    value = self.map_split.data[idx]
-                    # ---- Value judgement ------# 
-                    if value == 87 or value == 100: # meet obstcle or corner : do nothing 
-                        break 
-                    elif value == 50: # Create new corner
-                        # self.map_split.data[idx] = 99
-                        ans.append(idx)
-                        break
-                    else: # == 0 , Update , next step 
-                        error = error + deltaerr * self.resolution
-                        if error >= 0.5 * self.resolution:
-                            y = y + self.sign(deltay) * self.resolution
-                            error = error - 1 * self.resolution
-                        # Update 
-                        i += 1
-            else:  # 45~90 degree
-                x = x_end # vertex_start.x
-                deltaerr = 1 / deltaerr
-                i = 1
-                while True : 
-                    y = y_end + i * self.resolution * self.sign(deltay)
-
-                    idx = self.XY2idx((x,y))
-                    value = self.map_split.data[idx]
-                    # ---- Value judgement ------# 
-                    if value == 87 or value == 100: # meet obstcle or corner : do nothing 
-                        break 
-                    elif value == 50: # Create new corner
-                        # self.map_split.data[idx] = 99
-                        ans.append(idx)
-                        break
-                    else: # == 0 , Update , next step 
-                        error = error + deltaerr * self.resolution
-                        if error >= 0.5 * self.resolution:
-                            x = x + self.sign(deltax) * self.resolution
-                            error = error - 1 * self.resolution
-                        # update 
-                        i += 1 
+            line_list = self.bresenham_line((x_end, y_end), slope, self.sign(deltax) , self.judgement_function)
+            
+            last_idx = self.XY2idx(line_list[-1])
+            if self.map_split.data[last_idx] == 50:
+                ans.append(last_idx)
         return ans 
+    
+    def judgement_function (self, (x,y)):
+        '''
+        Meet non-space return True 
+        '''
+        value = self.map_split.data[self.XY2idx((x,y))]
+        if value != 0: 
+            return True 
+        else: 
+            return False 
+    
+    def judgement_function_2 (self, (x,y), end_point):
+        '''
+        Meet end_point return True 
+        '''
+        print ("self.XY2idx(end_point) : " + str(self.XY2idx(end_point)))
+        print ("self.XY2idx((x,y))     : " + str(self.XY2idx((x,y))))
+        if self.XY2idx(end_point) == self.XY2idx((x,y)):
+            return True 
+        else: 
+            return False 
+        
+    def judgement_function_3 (self, (x,y)):
+        '''
+        Meet obstacle and others territory turn True 
+        '''
+        value = self.map_split.data[self.XY2idx((x,y))]
+        if value != 0 and value != 50 and value != 100 :  # Obstacle 
+            return True 
+        else: 
+            return False 
+
+    
+    def bresenham_line(self, start_point , slope = None  , sign = None   , end_condition = None , end_point = None ): 
+        '''
+        Get bresenham line by given start point with slope, will return when specify end_condition is meet.
+        Input : 
+            start_point : (x,y) - turple
+            slope : float, recommand get from self.get_slope() 
+            sign : 1 or -1 -- decide which dircetion to go , 1 means First and Fourth quadrant (x-positive position), -1 means Third and Second quadrant
+            end_condition : function that return T/F
+            end_point : (x,y) -- turple 
+        Output : 
+            List with bresenham list : [(x1,y1), (x2,y2) , (x3,y3), .....]
+            Note that list not include start_point
+        Note that if pass in end_point, you don't have to assig 'slope', 'sign', 'end_condition'
+        '''
+
+        ans = []
+        error = 0.0
+        if end_point == None : 
+            dx_sign = sign
+            dy_sign = self.sign(sign* slope)
+            slope = abs(slope)
+        else: # assign end_point
+            slope = self.get_slope(start_point, end_point)
+            end_condition = self.judgement_function_2
+            dx_sign = self.sign(end_point[0] - start_point[0])
+            dy_sign = self.sign(dx_sign * slope)
+            slope = abs(slope)
+            
+        if 0 <= slope <= 1: # 0~45 degree
+            y = start_point[1]
+            i = 1
+            while True:
+                # Get (x,y) and update error
+                x = start_point[0] + i * self.resolution * dx_sign
+                error = error + slope * self.resolution
+                if error >= 0.5 * self.resolution:
+                    y = y + dy_sign * self.resolution
+                    error = error - 1 * self.resolution
+
+                # Append (x,y) and check end point 
+                #self.set_point(x,y,0,255,255, size = 0.05)
+                #pub_marker.publish(self.markerArray)
+                ans.append((x,y))
+                if end_point == None: 
+                    if end_condition((x,y)):
+                        return ans
+                else: 
+                    if end_condition((x,y), end_point):
+                        return ans 
+                # Update 
+                i += 1
+        else:  # 45~90 degree
+            x = start_point[0]
+            slope = 1 / slope # TODO will change value outside ???
+            i = 1
+            while True : 
+                # Get (x,y) and update error
+                y = start_point[1] + i * self.resolution * dy_sign
+                # Update , next step 
+                error = error + slope * self.resolution
+                if error >= 0.5 * self.resolution:
+                    x = x + dx_sign * self.resolution
+                    error = error - 1 * self.resolution
+                
+                # Append (x,y) and check end point
+                #self.set_point(x,y,0,255,255, size = 0.05)
+                #pub_marker.publish(self.markerArray)
+                ans.append((x,y))
+                if end_point == None: 
+                    if end_condition((x,y)):
+                        return ans
+                else: 
+                    print ("end_point : " + str(end_point))
+                    if end_condition((x,y), end_point):
+                        return ans 
+                # update 
+                i += 1 
 
     def sign (self, x):
         if x < 0 :
