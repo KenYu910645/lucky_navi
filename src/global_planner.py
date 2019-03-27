@@ -137,7 +137,7 @@ class GLOBAL_PLANNER():
                         del self.closedset[y]
                     x_count += 1
                 else: 
-                    tentative_g_score = self.g_score[x] + self.neighbor_dist(x,y) + self.neighbor_delta_cost(x ,y) * 0.1  # Cost: y -x (0 ~ 100)
+                    tentative_g_score = self.g_score[x] + self.neighbor_dist(x,y) + self.neighbor_delta_cost(x ,y) * 0.1 # 0.1  # Cost: y -x (0 ~ 100)
                     try: 
                         if tentative_g_score < self.g_score[y]:
                             self.came_from[y] = x            #y is key, x is value//make y become child of X 
@@ -157,18 +157,25 @@ class GLOBAL_PLANNER():
         
         #----------------- Publish Path----------------#
         p = self.navi_goal
+        dis_sum = 0
         while True: 
             #----- Convert idx -> Pose -------#
-            step = Pose() 
+            step = Pose()
             if p == current_pos_idx:
                 rospy.loginfo("Finish drawing !!")
                 break 
             (step.position.x ,step.position.y) = self.idx2XY(p)
             self.set_point(p, 255, 255, 255 )
+            # ----get Dis ----# 
+            dis_sum += self.neighbor_dist(p , self.came_from[p])
             #----- Rewine ------# 
             p = self.came_from[p]
         pub_marker.publish(self.markerArray)
         self.is_need_pub = True 
+        # ------ Test -----# 
+        print ("distance_GRID = " + str(dis_sum))
+        print ("distance_eduli = " + str(self.neighbor_dist(self.navi_goal , current_pos_idx)))
+        print ("GRID - EDUELI = " + str(dis_sum - self.neighbor_dist(self.navi_goal , current_pos_idx)))
 
     def neighbor_delta_cost(self, x ,y):
         #
