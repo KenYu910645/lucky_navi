@@ -8,17 +8,19 @@ from utility import *
 from map_find_corner import MAP_FIND_CORNER
 from nation_unify import NATION_UNIFY
 from map_spliter import MAP_SPLITER
+from debug_marker import MARKER
 
-pub_marker = rospy.Publisher('markers', MarkerArray,queue_size = 1,  latch=True  )
-pub_marker_line = rospy.Publisher('marker_line', Marker ,queue_size = 1,  latch=True  )
-pub_marker_arrow = rospy.Publisher('marker_arrow', MarkerArray ,queue_size = 1,  latch=True  )
-pub_map_find_corner = rospy.Publisher('map_find_corner', OccupancyGrid ,queue_size = 10,  latch=True)
-pub_map_territory = rospy.Publisher('map_territory', OccupancyGrid ,queue_size = 10,  latch=True)
+IS_DEBUG_MSG    = True # False # True 
+IS_DEBUG_MARKER = True   #  True 
+
+#Output topic 
+pub_map_find_corner = rospy.Publisher('map_find_corner', OccupancyGrid ,queue_size = 10,latch=True)
+pub_map_territory   = rospy.Publisher('map_territory'  , OccupancyGrid ,queue_size = 10,latch=True)
 
 # Classes
-MFC = MAP_FIND_CORNER()
-MS  = MAP_SPLITER()
-NU  = NATION_UNIFY()
+MFC = MAP_FIND_CORNER (is_debugMsg = IS_DEBUG_MSG, is_debugMarker = IS_DEBUG_MARKER)
+MS  = MAP_SPLITER     (is_debugMsg = IS_DEBUG_MSG, is_debugMarker = IS_DEBUG_MARKER)
+NU  = NATION_UNIFY    (is_debugMsg = IS_DEBUG_MSG, is_debugMarker = IS_DEBUG_MARKER)
 
 class MAIN_MAP():
     def __init__(self):
@@ -50,7 +52,6 @@ class MAIN_MAP():
         new_map.data = GV.map_find_corner
         pub_map_find_corner.publish(new_map)
 
-
     def publish_map_territory(self):
         '''
         publish map_territory into /map_territory
@@ -70,57 +71,57 @@ class MAIN_MAP():
             #------ Init map split -------# 
             MFC.init_map_find_corner()
             MFC.get_corner_and_contour()
-
+            
             #------ Find aux corner -------# 
             aux_corner_list = MFC.get_aux_corner()
             for i in aux_corner_list:
                 GV.map_find_corner[i] = 100
 
+
             # ----- Publish result --------# 
             self.publish_map_find_corner()
             rospy.loginfo("[map_find_corner] take " + str(time.time() - t_start) + " sec.")
+            if IS_DEBUG_MSG: 
+                rospy.loginfo("[map_find_corner] aux_corner : " + str(aux_corner_list))
+            if IS_DEBUG_MARKER : 
+                for p in aux_corner_list: 
+                    MARKER.set_sphere(p, (255,0,0), size = 0.07)
+                MARKER.pub_sphere()
+                time.sleep(1.5)
+                MARKER.clean_all_marker()
             
             self.state = 'map_spliter'
-            # TMP 
+            # TMP  
             # self.state = 'finish'
         
         elif self.state == 'map_spliter':
             t_start = time.time()
             MS.init_map_territory()
-            
             while MS.state == 'iterating':
                 num = MS.iterateOnce()
-                # --- TODO -----# 
-                # per iterate debug message 
-                if num != None : 
-                    rospy.loginfo(GV.nation_dict[num].__str__())
-                # ----Get first nation -------# 
-                
-                #Debug
-                '''
-                self.update_map_find_corner()
-                self.update_map_territory() 
-                pub_marker.publish(GV.markerArray)
-                time.sleep(1)
-                '''
+                if IS_DEBUG_MARKER:
+                    self.publish_map_territory()
+            
             if MS.state == 'finish':
-                # Graph traversal
-                traversal = graph_traversal(MS.first_nation)
-                for T in traversal: 
-                    paranet = T[0]
-                    for child in T[1]:
-                        arrow_tail = GV.nation_dict[paranet].center_of_mass
-                        arrow_head = GV.nation_dict[child].center_of_mass
-                        set_arrow(arrow_tail , arrow_head, 255,0,0)
-
-                pub_marker_arrow.publish(GV.marker_arrow)
                 self.publish_map_territory() 
-                pub_marker.publish(GV.markerArray)
-                time.sleep(2)
-                clean_all_marker()
+                if IS_DEBUG_MARKER:
+                    MARKER.clean_all_marker()
+                    # Graph traversal
+                    traversal = graph_traversal(MS.first_nation)
+                    for T in traversal: 
+                        paranet = T[0]
+                        for child in T[1]:
+                            arrow_tail = GV.nation_dict[paranet].center_of_mass
+                            arrow_head = GV.nation_dict[child].center_of_mass
+                            MARKER.set_arrow([arrow_tail,arrow_head], (255,0,0))
+                    MARKER.pub_arrow()
+                    time.sleep(3)
+                    MARKER.clean_all_marker()
 
                 rospy.loginfo("[map_spliter] Total take " + str(time.time() - t_start) + " sec.")
                 self.state = "nation_unify"
+                # TMP 
+                # self.state = 'finish'
             elif MS.state == 'error' :
                 pass  
         
@@ -131,21 +132,22 @@ class MAIN_MAP():
 
             while NU.state == 'iterating':
                 NU.iterateOnce()
+                if IS_DEBUG_MARKER:
+                    self.publish_map_territory()
 
             if NU.state == 'finish':
                 # After unification Graph traversal
                 traversal = graph_traversal(MS.first_nation)
                 for T in traversal:
-                    rospy.loginfo(GV.nation_dict[T[0]].__str__())
+                    # rospy.loginfo(GV.nation_dict[T[0]].__str__())
                     paranet = T[0]
                     for child in T[1]:
                         arrow_tail = GV.nation_dict[paranet].center_of_mass
                         arrow_head = GV.nation_dict[child].center_of_mass
-                        set_arrow(arrow_tail , arrow_head, 255,0,0)
-                
-                pub_marker_arrow.publish(GV.marker_arrow)
+                        MARKER.set_arrow([arrow_tail,arrow_head],(255,0,0))
+                MARKER.pub_arrow()
                 self.publish_map_territory()
-                pub_marker.publish(GV.markerArray)
+                MARKER.pub_sphere()
                 rospy.loginfo("[nation_unify] take " + str(time.time() - t_start) + " sec.")
             elif NU.state == 'error':
                 pass 
@@ -158,17 +160,17 @@ class MAIN_MAP():
             self.state = 'stand_by'
 
 #----- Declare Class -----# 
-main_map = MAIN_MAP()
+MAIN = MAIN_MAP()
 
 def main(args):
 
     #----- Init node ------# 
     rospy.init_node('map_spliter', anonymous=True)
-    rospy.Subscriber('/map', OccupancyGrid, main_map.global_map_CB)
+    rospy.Subscriber('/map', OccupancyGrid, MAIN.global_map_CB)
     
     r = rospy.Rate(10)#call at 10HZ
     while (not rospy.is_shutdown()):
-        main_map.iterateOnce()
+        MAIN.iterateOnce()
         r.sleep()
 
 if __name__ == '__main__':

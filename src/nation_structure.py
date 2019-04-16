@@ -3,15 +3,20 @@ import time
 import math
 import rospy 
 from utility import *
+from debug_marker import MARKER
+
 
 class NATION_STRUCTURE(): 
-    def __init__(self, number):
+    def __init__(self, number, is_debugMsg = False, is_debugMarker = False ):
         self.number = number # number # 1 to 1 numbering for every nation 
         self.vertexs = []# vertexs # [bottom_edge-1 , bottom_edge_2, vertex] - idx
         self.territory = []# territory # [idx_1, idx_2, idx_3, idx_4, .......]# Boarder not nessary to be territory, 
         self.boarders = {} # {(vertex1, vertex2) : {'XY_list' : [...original baorders..] , 'param_coff' : [a,b,c,d] , 'neigh_area' : 100}}
         self.center_of_mass = None # (x,y) - turple 
         self.area = 0
+        # ---Flag -----# 
+        self.is_debugMsg    = is_debugMsg
+        self.is_debugMarker = is_debugMarker
 
     def __str__(self):
         output = '\n'
@@ -22,16 +27,7 @@ class NATION_STRUCTURE():
         output+= "neighbor_nation : " + str(self.get_neighbor_nation().keys()) + '\n'
         return output 
 
-    def get_center_of_mass(self):
-        '''
-        Input : 
-            triangle's three vertexs : [vertex1, vertex2 ,vertex3] - idx
-        Output : 
-            center of mass - (x,y)
-        '''
-        [v1,v2,v3] = [idx2XY(self.vertexs[0]) , idx2XY(self.vertexs[1]) , idx2XY(self.vertexs[2])]
-        self.center_of_mass = (((v1[0] + v2[0] + v3[0])/3.0 , (v1[1] + v2[1] + v3[1])/3.0))
-        return self.center_of_mass
+
     
     def get_triangle_area(self):
         '''
@@ -93,7 +89,6 @@ class NATION_STRUCTURE():
             new_territory_list  = [idx1 , idx2 , idx3 ,.... ]
         Put these new terrtory_list at map_territory and self.territory
         '''
-        global map_territory 
         for i in new_territory_list:
             # TODO Do some check, like, same idx in territory 
             self.territory.append(i)
@@ -133,7 +128,7 @@ class NATION_STRUCTURE():
 
         width = GV.map_ori.info.width
         crumbs = []
-        abs_slope = abs(get_slope(idx2XY(self.vertexs[0]), idx2XY(self.vertexs[1])))
+        abs_slope = abs(get_slope(self.vertexs[:2]))
 
         for i in self.boarders[(self.vertexs[0] , self.vertexs[1])]['XY_list']:
             idx = XY2idx(i)
@@ -160,17 +155,38 @@ class NATION_STRUCTURE():
             Note that edge idx are sorted, to grauntee uniquness.
         '''
         results = {}
+        
+        
         for boarder_key in self.boarders:
-            slope_n = -1.0 / get_slope(idx2XY(boarder_key[0]), idx2XY(boarder_key[1]))
-            side_1 = []
-            side_2 = []
-            for p in self.boarders[boarder_key]['XY_list']:
-                side_1.append(bresenham_line(p, slope_n, 1, ED_once_exit)[0])
-                side_2.append(bresenham_line(p, slope_n,-1, ED_once_exit)[0])
-                # self.set_point(p[0],p[1],255,0,0, size = 0.05)
+            
+            slope_n = get_normal_slope(boarder_key)
+            
+            rc_list = []
+            for direc in [1,-1]:
+                side = []
+                for p in self.boarders[boarder_key]['XY_list']:
+                    side.extend(bresenham_line(p, slope_n, direc, ED_once_exit))
+                if side == []:
+                    rc_list.append(100) # boundary see as wall 
+                else:
+                    rc_list.append(tyranny_of_the_majority(side))
+            results[boarder_key] = tuple(rc_list)
+
+
+            #side_1 = []
+            #side_2 = []
+            #for p in self.boarders[boarder_key]['XY_list']:
+            # #   side_1.extend(bresenham_line(p, slope_n, 1, ED_once_exit))
+            #    side_2.extend(bresenham_line(p, slope_n,-1, ED_once_exit))
+                
+                # self.set_sphere(p[0],p[1],255,0,0, size = 0.05)
             #Add new open_side 
-            (rc_1, rc_2) = (tyranny_of_the_majority(side_1),  tyranny_of_the_majority(side_2))
-            results[boarder_key] = (rc_1, rc_2)
+            #print ("BEfore")
+            #print ("side_1 : " + str(side_1))
+            #print ("side_2 : " + str(side_2))
+            # (rc_1, rc_2) = (tyranny_of_the_majority(side_1),  tyranny_of_the_majority(side_2))
+            #print ("After ")
+            #results[boarder_key] = (rc_1, rc_2)
         return results
     
     def three_vertexs_get_remain_info(self):
@@ -178,6 +194,7 @@ class NATION_STRUCTURE():
         Input : 
             Using self.vertexs , to deduct remain info, such as ,boarders, territory, center_of_mass, area, neighbor_nation.
         '''
+        
         for i in range(len(self.vertexs)): # 0 ,1 ,2
             # ----- GEt baorders key ------# 
             tmp = [self.vertexs[i-1] , self.vertexs[i]]
@@ -188,17 +205,22 @@ class NATION_STRUCTURE():
             #------ Get XY_list ------# 
             self.boarders[boarders_key]['XY_list']    = expand_edge(boarders_key)
             #------ paramtric_line ----# 
-            self.boarders[boarders_key]['param_coff'] = parametric_line(idx2XY(boarders_key[0]) , idx2XY(boarders_key[1]))
+            self.boarders[boarders_key]['param_coff'] = parametric_line(boarders_key)
         
         #------ Get center of mass -------# 
-        self.center_of_mass = self.get_center_of_mass()
+        self.center_of_mass = get_center_of_mass(self.vertexs)
+        if self.is_debugMsg:
+            print ("center_of_mass : " + str(self.center_of_mass))
         #------ Get traiangle_area -------# 
         self.area = self.get_triangle_area()
-
+        if self.is_debugMsg:
+            print ("area : " + str(self.area))
+        
         #####################
         ###  territory    ###
         #####################
-        #--------  Claim space boarder as territory --------#  
+        #--------  Claim space boarder as territory --------#
+        
         boarders_list = self.get_all_boarders_XY_list()
         territory_add =  []
         for i in boarders_list:
@@ -207,10 +229,9 @@ class NATION_STRUCTURE():
                 if GV.map_territory[idx] == 0: # Space boarders!!
                     territory_add.append(idx)
         self.add_territory(territory_add)
-
+        
         #--------- Fill in territory ------------# 
         territory_fill_list = self.fill_in_territory(XY2idx(self.center_of_mass))
-        print ("territory_fill_list_len : " + str(len(territory_fill_list)))
         
         #-------- Find crumbs -----------# 
         crumbs_list = self.find_crumbs()
@@ -218,10 +239,13 @@ class NATION_STRUCTURE():
 
         #-------- Claim territory ---------# 
         self.add_territory(territory_fill_list)
+        if self.is_debugMsg: 
+            print ("Territory size : " + str(len(self.territory)))
 
         ##############################
         ###  new nation diplomatic ###
         ##############################
+
         results = self.get_diplomatic()
         for boarder_key in results:
             rcs = list(results[boarder_key]) # tuple -> list
@@ -229,6 +253,9 @@ class NATION_STRUCTURE():
                 rcs.remove(self.number)
             except: 
                 rospy.logerr("[diplomatic] Serious problem edges! non of the rc is nation number.results : " + str(rcs))
-                return  
+                return
             else: 
                 self.boarders[boarder_key]['neigh_area'] = rcs[0]
+                if self.is_debugMsg:
+                    print ("| --> " + str(rcs[0]))
+        

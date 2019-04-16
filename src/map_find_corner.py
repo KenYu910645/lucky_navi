@@ -3,11 +3,13 @@ import time
 from nav_msgs.msg import OccupancyGrid
 import rospy 
 from utility import *
+from debug_marker import MARKER
+
 
 class MAP_FIND_CORNER():
-    def __init__(self):
-        pass 
-
+    def __init__(self, is_debugMsg = False  ,is_debugMarker = True  ):
+        self.is_debugMsg    = is_debugMsg
+        self.is_debugMarker = is_debugMarker
     def init_map_find_corner(self):
         '''
         Given GV.map_ori , init GV.map_find_corner
@@ -39,10 +41,9 @@ class MAP_FIND_CORNER():
                 # ----- Boundary check ------# 
                 if len(neighbor_list) < 8:
                     print ("Boundary")
-                    #self.map_split.append(0)
                     continue
 
-                coner_1 = [100 ,100 ,100, 
+                coner_1 = [100 ,100 ,100,
                            100 ,     '*',
                            100 ,'*' ,'*']
                 coner_2 = [100 ,100 ,100,
@@ -56,11 +57,14 @@ class MAP_FIND_CORNER():
                            100 ,100 ,100]
                 
                 # Inner coner 
-                if self.list_compare(neighbor_list, coner_1) or self.list_compare(neighbor_list, coner_2) or self.list_compare(neighbor_list, coner_3) or self.list_compare(neighbor_list, coner_4):
-                    print ("Inner Coner !!")
-                    GV.map_find_corner[ori_map_pixel] = 100 
-                    #(x,y) = self.idx2XY(ori_map_pixel)
-                    #self.set_point(x,y,255,255,0, size = 0.1)
+                if self.list_compare(neighbor_list, coner_1) or \
+                   self.list_compare(neighbor_list, coner_2) or \
+                   self.list_compare(neighbor_list, coner_3) or \
+                   self.list_compare(neighbor_list, coner_4):
+                    GV.map_find_corner[ori_map_pixel] = 100
+                    if self.is_debugMarker:
+                        MARKER.set_sphere(ori_map_pixel, (255,255,0) , size = 0.07)
+                        MARKER.pub_sphere() # pub_marker_sphere.publish(GV.marker_sphere)
                     continue
                 
                 coner_5 = [100 ,0   ,'*', 
@@ -93,10 +97,10 @@ class MAP_FIND_CORNER():
                     (self.list_compare(neighbor_list, coner_6) and self.list_compare(neighbor_value(ori_map_pixel+ 1 + width), coner_10)) or 
                     (self.list_compare(neighbor_list, coner_7) and self.list_compare(neighbor_value(ori_map_pixel- 1 - width), coner_11)) or 
                     (self.list_compare(neighbor_list, coner_8) and self.list_compare(neighbor_value(ori_map_pixel+ 1 - width), coner_12))):
-                    print ("Outer Coner !!")
                     GV.map_find_corner[ori_map_pixel] = 100 
-                    #(x,y) = self.idx2XY(ori_map_pixel)
-                    #self.set_point(x,y,0,255,255, size = 0.1)
+                    if self.is_debugMarker:
+                        MARKER.set_sphere(ori_map_pixel, (0,255,255) , size = 0.07)
+                        MARKER.pub_sphere() # pub_marker_sphere.publish(GV.marker_sphere)
                     continue
                 
                 is_break = False 
@@ -104,7 +108,7 @@ class MAP_FIND_CORNER():
                     if value == 100:# This is edge
                         GV.map_find_corner[ori_map_pixel] = 50
                         #(x,y) = self.idx2XY(ori_map_pixel)
-                        #self.set_point(x,y,255,0,0, size = 0.05)
+                        #self.set_sphere(x,y,255,0,0, size = 0.05)
                         is_break = True 
                         break
                 if is_break: 
@@ -143,11 +147,13 @@ class MAP_FIND_CORNER():
                             if GV.map_find_corner[y] == 50:
                                 if (y not in close_list) and (y not in open_list): # Not explore before, a totally new contour
                                     open_list.append(y)
-                # discover_coner_list.pop(0)
                 print ("============================")
                 print("discover_coner_list : " + str(discover_coner_list))
                 
                 for i in self.extend_slope(discover_coner_list):
+                    if self.is_debugMarker:
+                        MARKER.set_line([discover_coner_list[0], i])
+                        MARKER.pub_line()
                     print (str(i))
                     aux_corner_list.append(i)
         return aux_corner_list
@@ -179,19 +185,23 @@ class MAP_FIND_CORNER():
             ans = [aux_corner_1, aux_corner_2] (idx), len is not fix
         '''
         ans = []
-        for t in range(2):
-            vertex_end = discover_coner_list[0]
-            vertex_start = discover_coner_list[t+1]
-            (x_end, y_end) = idx2XY(vertex_end)
-            (x_start, y_start) = idx2XY(vertex_start)
+        for t in [1,2]:
+            p_pivot  = discover_coner_list[0]
+            p_known  = discover_coner_list[t]
+            pivot_xy = idx2XY(p_pivot)
+            known_xy = idx2XY(p_known)
             
-            slope  = get_slope(idx2XY(vertex_start), idx2XY(vertex_end))
-            deltax = x_end - x_start
-            line_list = bresenham_line((x_end, y_end), slope, sign(deltax) , self.ED_non_space)
-            
-            last_idx = XY2idx(line_list[-1])
-            if GV.map_find_corner[last_idx] == 50:
-                ans.append(last_idx)
+            slope  = get_slope([p_pivot,p_known])
+            dx = pivot_xy[0] - known_xy[0]
+            if dx == 0.0: # Vertical exception, use dy to replace dx  
+                dx = pivot_xy[1] - known_xy[1]
+            try :   
+                p_unknown = XY2idx(bresenham_line(pivot_xy , slope, sign(dx) , self.ED_non_space)[-1])
+            except: 
+                pass 
+            else: 
+                if GV.map_find_corner[p_unknown] == 50:
+                    ans.append(p_unknown)
         return ans 
     
     def ED_non_space (self, (x,y), end_point, times):

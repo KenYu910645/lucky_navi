@@ -5,6 +5,8 @@ import rospy
 from geometry_msgs.msg import Point
 from nav_msgs.msg import OccupancyGrid, MapMetaData
 from visualization_msgs.msg import Marker, MarkerArray # Debug drawing 
+# This file Can't publish markers  
+
 
 class GLOBAL_VARIABLE():
     '''
@@ -12,39 +14,17 @@ class GLOBAL_VARIABLE():
     '''
     def __init__(self):
         # Note!!!!  Remember to update these two value, when map change (Call back)
-        #--------- Input ------------# 
-        self.map_ori = None # Need to update  
-        self.width  = None
-        self.height = None
-        self.reso   = None
+        #--------- Input ------------#
+        self.map_ori = None # Need to update
+        self.width   = None
+        self.height  = None
+        self.reso    = None
         #--------- Output ------------# 
         self.nation_dict =     None 
         self.map_territory =   None 
-        self.map_find_corner = None 
-        #--------- Debug ------------# 
-        self.markerArray = MarkerArray()
-        self.marker_arrow = MarkerArray()
-        # Debug 
-        marker_line = Marker()
-        marker_line.header.frame_id = "/map"
-        marker_line.id = 1 
-        size = 0.02
-        marker_line.ns = "tiles"
-        # marker.header.stamp = rospy.get_rostime()
-        marker_line.type = marker_line.LINE_LIST
-        marker_line.action = marker_line.ADD
-        marker_line.scale.x = size
-        marker_line.scale.y = size
-        marker_line.scale.z = size
-        marker_line.color.a = 1.0
-        marker_line.color.r = 0/255.0
-        marker_line.color.g = 255/255.0
-        marker_line.color.b = 0/255.0
-        marker_line.pose.orientation.w = 1.0
-        self.marker_line = marker_line
+        self.map_find_corner = None
 
 GV = GLOBAL_VARIABLE() # Import GV in file, then the file can access global variables.
-
 
 
 def sign (x):
@@ -53,19 +33,20 @@ def sign (x):
     else :
         return 1
 
-def neighbor_idx(x):
+def neighbor_idx(point):
     '''
-    return neighborhood of x, as a List with 8 node.(up, down, right, left,up-right , up-left, down-right, down-left)
-    '0'  '1'  '2'
-    '3'  'x'  '4'
-    '5'  '6'  '7'
+    return neighborhood of point, as a List with 8 node.(up, down, right, left,up-right , up-left, down-right, down-left)
+    '0'  '1'      '2'
+    '3'  'point'  '4'
+    '5'  '6'      '7'
     
     Input : 
-        x - idx 
+        point - idx or (x,y) 
     Ouput : 
         [idx1 , idx2 , idx3, .... ,idx8] # len should be 8 normally.
     '''
     width = GV.width
+    x = idxy_converter(point , convert_to = 'idx')
 
     ans = list()
     ans.append(x - 1 + width)# UP-LEFT
@@ -78,7 +59,7 @@ def neighbor_idx(x):
     ans.append(x + 1 - width)# DOWN-RIGHT
     return ans 
 
-def neighbor_5X5_idx(x):
+def neighbor_5X5_idx(point):
     '''
     return neighborhood of x, as a List with 8 node.(up, down, right, left,up-right , up-left, down-right, down-left)
     '0'   '1'   '2'  '3'  '4'
@@ -88,11 +69,12 @@ def neighbor_5X5_idx(x):
     '19'  '20'  '21' '22' '23'
     
     Input : 
-        x - idx 
+        point - idx or (x,y) 
     Ouput : 
         [idx1 , idx2 , idx3, .... ,idx24] # len should be 24 normally.
     '''
     width = GV.width
+    x = idxy_converter(point , convert_to = 'idx')
 
     ans = list()
     for i in range(5):
@@ -102,7 +84,7 @@ def neighbor_5X5_idx(x):
             ans.append(x + width_coff*width  + const_coff)
     return ans 
 
-def neighbor_value(x):
+def neighbor_value(point):
     '''
     At map (-1, 100 , 0)
     return neighborhood of x, as a List with 8 node.(up, down, right, left,up-right , up-left, down-right, down-left)
@@ -110,33 +92,176 @@ def neighbor_value(x):
     '3'  'x'  '4'
     '5'  '6'  '7'
     Input : 
-        x - idx 
+        point - idx or (x,y)  
     Ouput : 
         [value1 , value2 , value3, ....] # len should be 8 normally.
     '''
+    x = idxy_converter(point , convert_to = 'idx')
+
     neighbor_idx_list = neighbor_idx(x)
     ans = []
     for i in neighbor_idx_list:
         ans.append(GV.map_ori.data[i])
     return ans 
 
-def get_slope(start_point , end_point):
+def get_vector_angle(vector):
+    '''
+    Return angle between vector and +x
+    Input: 
+        vector - (x,y)
+    Ouptut : 
+        ang  - float ()
+    '''
+    (x,y) = vector 
+    norm = math.sqrt(x*x + y*y)
+    thetasin = math.asin(y / norm)
+    thetacos = math.acos(x / norm)
+    thetasindegree = thetasin * 180 / math.pi
+    thetacosdegree = thetacos * 180 / math.pi
+
+    ans = None 
+    if thetasindegree >= 0:
+        ans = thetacosdegree
+    else:
+        if thetacosdegree <= 90:
+            ans =  360 + thetasindegree
+        else:
+            ans =  180 - thetasindegree
+    
+    return ans * (math.pi / 180.0)
+
+def get_slope(two_points):
     '''
     Given two points, get slope.
     Input : 
-        start_point : (x,y) - tuple
-        end_point = (x,y) - tuple 
+        [idx1 ,idx2] or [(x,y) , (x,y)]
     Output : 
         return slope - float
     '''
-    deltax = end_point[0] - start_point[0]
-    deltay = end_point[1] - start_point[1]
+    [p1 , p2] = idxy_converter(two_points , convert_to = 'xy')
+
+    deltax = p2[0] - p1[0]
+    deltay = p2[1] - p1[1]
     if deltax == 0: # To avoid inf slope
-        deltax = 0.0000001
+        return float('inf')
+        # deltax = 0.0000001
     if deltay == 0: # To avoid 0 slope
-        deltay = 0.0000001
+        return 0.0
+        # deltay = 0.0000001
     return (deltay / deltax) # slope
 
+def get_normal_slope(two_points):
+    '''
+    Given two points, get normal slope.
+    Input : 
+        [idx1 ,idx2] or [(x,y) , (x,y)]
+    Output:
+        return normal slope - float
+    '''
+    slope = get_slope(two_points)
+    if slope == 0: 
+        return float('inf')
+    elif slope == float('inf') or slope == float('-inf'):
+        return 0.0
+    else:
+        return -1.0 / slope
+
+def is_in_boundary(idx) : 
+    '''
+    Input : 
+        idx 
+    Output:
+        return True : inside bouandary (valid)
+               False : outside bouandary (invalid)
+    '''
+    if idx >= 0 and idx <= GV.width*GV.height -1:
+        return True 
+    else: 
+        return False 
+
+def idxy_converter(data, convert_to):
+    '''
+    Input : 
+        data : (x,y) , idx , [(x,y) , (x,y), ...] , [idx, idx,idx, ....] 
+    convert_to = 'xy' or 'idx'
+    if data == [] or (): 
+        return data itself.
+    '''
+    ori_form = '' # 'xy' or 'idx'
+    wrapper = None 
+    try: 
+        A = len(data)
+    except: # idx 
+        if type(data) == int:
+            ori_form = 'idx'
+            wrapper = None 
+    else: 
+        if A == 0:  # [] or ()
+            rospy.logdebug("[idxy_converter] null input type, input = " + str(data))
+            return data
+        try: 
+            B = len(data[0])
+        except:
+            if type(data[0]) == int : #  (idx, idx, ... ) or [idx, idx, ...]
+                ori_form = 'idx'
+                wrapper = type(data)
+            elif type(data[0]) == float and A == 2: # (x,y)
+                ori_form = 'xy'
+                wrapper = None 
+        else:
+            if B == 2 and type(data[0]) == tuple and type(data[0][0]) == float: # [(x,y) , (x,y)] or ((x,y) , (x,y))
+                ori_form = 'xy'
+                wrapper = type(data)
+            else: # ERROR, too many wrapper.
+                pass  
+    
+    if ori_form == '':
+        rospy.logerr("[idxy_converter] illegal input type, input = " + str(data))
+        return data 
+    #----- Wrapped data ------# 
+    data_wrap = None 
+    if wrapper == None:
+        data_wrap = [data]
+    else: 
+        data_wrap = data
+
+    #-------- Valid check ---------# 
+    if ori_form == 'idx':
+        for i in data_wrap: 
+            if not is_in_boundary(i):
+                rospy.logerr("[idxy_converter] data out of map range, input = " + str(i) + " > " + str(GV.width*GV.height -1))
+                return data 
+    elif ori_form == 'xy':
+        for i in data_wrap:
+            if not is_in_boundary(XY2idx(i)):
+                rospy.logerr("[idxy_converter] data out of map range, input = " + str(i) + " > " + str(GV.width*GV.height -1))
+                return data 
+
+    #-------- togoogle xy and idx ---------# 
+    ans = []
+    if ori_form == convert_to: # same type do nothing
+        ans = data_wrap[:]
+    elif ori_form == 'idx' and convert_to == 'xy':
+        for i in data_wrap:
+            ans.append(idx2XY(i))
+    elif ori_form == 'xy'  and convert_to == 'idx':
+        for i in data_wrap:
+            ans.append(XY2idx(i))
+    output = None 
+    #------ output -------# 
+    if wrapper == None : 
+        output =  ans[0]
+    elif wrapper == tuple: 
+        output = tuple(ans)
+    elif wrapper == list: 
+        output = ans 
+    debug = "data : " + str(data) + " , " 
+    debug+= ("wrapper : " + str(wrapper) + " , " )
+    debug+= ("ori_form : " + str(ori_form) + " , " )
+    debug+= ("output : " + str(output ) + " , " )
+    # print debug 
+    return output 
+    
 def idx2XY (idx):
     '''
     transfer map idx into (x,y) coordinate
@@ -147,8 +272,9 @@ def idx2XY (idx):
     '''
     width = GV.width
     reso  = GV.reso
+    # print ("idx2XY's width : " + str(width))
 
-    origin = [GV.map_ori.info.origin.position.x , GV.map_ori.info.origin.position.y]
+    origin = (GV.map_ori.info.origin.position.x , GV.map_ori.info.origin.position.y)
 
     x = (idx % width) * reso + origin[0] + reso/2 # Center of point 
     y = math.floor(idx / width) * reso + origin[1] + reso/2 
@@ -165,115 +291,18 @@ def XY2idx(XY_coor):
     width = GV.width
     reso  = GV.reso
 
-    origin = [GV.map_ori.info.origin.position.x , GV.map_ori.info.origin.position.y]
+    origin = (GV.map_ori.info.origin.position.x , GV.map_ori.info.origin.position.y)
     # Y 
     idx =  round((XY_coor[1] - origin[1]) / reso - 0.5) * width
     # X 
     idx += round((XY_coor[0] - origin[0]) / reso - 0.5)
     return int(idx)
 
-idx = 0 # For set_point 
-def set_point(x,y ,r ,g ,b , size = 0.02):
-    '''
-    Set Point at MarkArray 
-    '''
-    global idx
-    marker = Marker()
-    marker.header.frame_id = "/map"
-    marker.id = idx 
-    idx += 1 
-    marker.ns = "tiles"
-    marker.header.stamp = rospy.get_rostime()
-    marker.type = marker.SPHERE
-    marker.action = marker.ADD
-    marker.scale.x = size
-    marker.scale.y = size
-    marker.scale.z = size
-    marker.color.a = 1.0
-    marker.color.r = r/255.0
-    marker.color.g = g/255.0
-    marker.color.b = b/255.0
-    marker.pose.orientation.w = 1.0
-    (marker.pose.position.x , marker.pose.position.y) = (x,y)
-    GV.markerArray.markers.append(marker)
-
-def set_line(points):
-    '''
-    Set line at MarkArray
-    Input : 
-        points = [p1,p2....] 
-    '''
-    for i in points : 
-        p = Point()
-        p.x = i[0]
-        p.y = i[1]
-        GV.marker_line.points.append(p)
-
-idx_arrow = 0
-def set_arrow (start_point, end_point, r,g,b):
-    '''
-    Set Arrow at MarkArray
-    Input:
-        start_point:(x,y)
-        end_point : (x,y) 
-    '''
-    global idx_arrow
-    marker = Marker()
-    marker.header.frame_id = "/map"
-    marker.id = idx_arrow 
-    idx_arrow += 1 
-    marker.ns = "tiles"
-    marker.header.stamp = rospy.get_rostime()
-    marker.type = marker.ARROW
-    marker.action = marker.ADD
-    marker.scale.x = 0.05  # shaft diameter
-    marker.scale.y = 0.1 # head diameter
-    marker.scale.z = 0.1 # head length
-    marker.color.a = 1.0
-    marker.color.r = r/255.0
-    marker.color.g = g/255.0
-    marker.color.b = b/255.0
-    marker.pose.orientation.w = 1.0
-    p_start = Point()
-    p_end =   Point()
-    (p_start.x , p_start.y) = start_point
-    (p_end.x , p_end.y)     = end_point
-    marker.points.append(p_start)
-    marker.points.append(p_end)
-    # (marker.pose.position.x , marker.pose.position.y) = (x,y)
-    GV.marker_arrow.markers.append(marker)
-
-
-def clean_marker_ball():
-    #------- clean screen -------#
-    marker = Marker()
-    marker.header.frame_id = "/map"
-    marker.action = marker.DELETEALL
-    GV.markerArray.markers.append(marker)
-    # pub_marker.publish(self.markerArray)
-
-def clean_marker_line():
-    # clean_screen()
-    GV.marker_line = Marker()
-    # GV.marker_arrow = Marker()
-
-def clean_marker_arrow (): 
-    marker = Marker()
-    marker.header.frame_id = "/map"
-    marker.action = marker.DELETEALL
-    GV.marker_arrow.markers.append(marker)
-
-def clean_all_marker():
-    clean_marker_ball()
-    clean_marker_line()
-    clean_marker_arrow()
-
-
-def bresenham_line(start_point , slope = None  , direc = None   , end_condition = None , end_point = None ): 
+def bresenham_line(start_point , slope = None  , direc = None   , end_condition = None , point_end = None ): 
     '''
     Get bresenham line by given start point with slope, will return when specify end_condition is meet.
     Input : 
-        start_point : (x,y) - turple
+        start_point : (x,y) or idx 
         slope : float, recommand get from get_slope() 
         direc : 1 or -1 -- decide which dircetion to go , 1 means First and Fourth quadrant (x-positive position), -1 means Third and Second quadrant
         end_condition : function that return T/F
@@ -283,78 +312,78 @@ def bresenham_line(start_point , slope = None  , direc = None   , end_condition 
         Note that list not include start_point
     Note that if pass in end_point, you don't have to assig 'slope', 'sign', 'end_condition'
     '''
-    reso = GV.reso 
 
+    point_start = idxy_converter(start_point , convert_to = 'xy')
+    reso = GV.reso 
     ans = []
     error = 0.0
-    if end_point == None :
+    if point_end == None:
         dx_sign = direc
         dy_sign = sign(direc* slope)
         slope = abs(slope)
     else: # assign end_point
         #----- Check valid assign end_point ------# 
-        if XY2idx(start_point) == XY2idx(end_point):
-            print ("[bresenham_line] ERROR, start_point and end_point are the same, can't generate line." )
+        point_end = idxy_converter(point_end , convert_to = 'xy')
+        if XY2idx(point_start) == XY2idx(point_end):
+            rospy.logerr ("[bresenham_line] ERROR, point_start and end_point are the same, can't generate line." )
             return None 
-        slope = get_slope(start_point, end_point)
+        slope = get_slope([point_start, point_end])
         end_condition = ED_end_point
-        dx_sign = sign(end_point[0] - start_point[0])
+        dx_sign = sign(point_end[0] - point_start[0])
         dy_sign = sign(dx_sign * slope)
         slope = abs(slope)
         
     if 0 <= slope <= 1: # 0~45 degree
-        y = start_point[1]
+        y = point_start[1]
         i = 1
         while True:
             # Get (x,y) and update error
-            x = start_point[0] + i * reso * dx_sign
+            x = point_start[0] + i * reso * dx_sign
             error = error + slope * reso
             if error >= 0.5 * reso:
                 y = y + dy_sign * reso
                 error = error - 1 * reso
-
-            # Append (x,y) and check end point 
-            #self.set_point(x,y,0,255,255, size = 0.05)
-            #pub_marker.publish(self.markerArray)
-            ans.append((x,y))
-            if end_condition((x,y), end_point, i):
+            if is_in_boundary(XY2idx((x,y))):
+                ans.append((x,y))
+            else: 
+                rospy.logdebug("[bresenham_line] point out of boundary.")
+            if end_condition((x,y), point_end, i):
                 return ans 
             # Update 
             i += 1
     else:  # 45~90 degree
-        x = start_point[0]
-        slope = 1 / slope # TODO will change value outside ???
+        x = point_start[0]
+        slope = 1 / slope
         i = 1
         while True : 
             # Get (x,y) and update error
-            y = start_point[1] + i * reso * dy_sign
+            y = point_start[1] + i * reso * dy_sign
             # Update , next step 
             error = error + slope * reso
             if error >= 0.5 * reso:
                 x = x + dx_sign * reso
                 error = error - 1 * reso
-            
-            # Append (x,y) and check end point
-            #self.set_point(x,y,0,255,255, size = 0.05)
-            #pub_marker.publish(self.markerArray)
-            ans.append((x,y))
-            if end_condition((x,y), end_point, i):
+            if is_in_boundary(XY2idx((x,y))):
+                ans.append((x,y))
+            else: 
+                rospy.logdebug("[bresenham_line] point out of boundary.")
+            if end_condition((x,y), point_end, i):
                 return ans 
             # update 
             i += 1 
 
-def parametric_line(p1_XY, p2_XY):
+def parametric_line(points):
     '''
     x = at + c
     y = bt + d
     Input : start point and end_point 
-        points = (start_idx, end_idx)
-        Note that must (start_idx < end_idx) , to grantee parametric_line uniquness 
+        points = [p1, p2]
     Ouput : list
         [a,b,c,d]
     '''
-    
+    [p1_XY,  p2_XY] = idxy_converter(points, 'xy')
     (p1_idx , p2_idx) = (XY2idx(p1_XY), XY2idx(p2_XY))
+    # Note that must (start_idx < end_idx) , to grantee parametric_line uniquness 
     if p1_idx < p2_idx:
         p_s = p1_XY
         p_e = p2_XY
@@ -367,8 +396,6 @@ def parametric_line(p1_XY, p2_XY):
     #       [      a       ]  [       b     ]   [  c  ]  [  d  ]
     return [p_e[0] - p_s[0] , p_e[1] - p_s[1] , p_s[0] , p_s[1]]
 
-
-
 def expand_edge(points):
     '''
     Given two points, return edge.
@@ -377,21 +404,21 @@ def expand_edge(points):
     Output: 
         [(x1,y1), (x2,y2), ....... point_e, point_s] - last two elements are start point and end_point
     '''
-    point_s = idx2XY(points[0])
-    point_e = idx2XY(points[1])
-    ans = bresenham_line(point_s, end_point = point_e)
-    ans.append(point_s)
+    ans = bresenham_line(points[0], point_end = points[1])
+    ans.append(idxy_converter(points[0] , convert_to = 'xy'))
     return ans
 
 def tyranny_of_the_majority(citizens):
     '''
     Get most often voting value on map_territory
     Input: 
-        citizens : [(x1,y1), (x2,y2), ......]
+        citizens : [p1, p2 , ....]
     Output:
         valule at map_territory
     '''
     voting_result = {} # {100 : 2 , 87 : 4 , ....} #value : votes 
+    citizens = idxy_converter(citizens , convert_to = 'xy')
+
     for i in citizens:
         value = GV.map_territory[XY2idx(i)]
         if value in voting_result: 
@@ -408,15 +435,15 @@ def tyranny_of_the_majority(citizens):
             most_vote = voting_result[i]
     return most_voting_value
 
-def get_len(p1 , p2):
+def get_len(two_points):
     '''
     Given two points and return line length between these points
     Input: 
-        p1 - (x,y) - turple
-        p2 - (x,y) - turple
+        two_points = [p1,p2]
     Output: 
         length - float
     '''
+    [p1 , p2] = idxy_converter(two_points , convert_to = 'xy')
     dx = p2[0] - p1[0]
     dy = p2[1] - p1[1]
     return math.sqrt(dx*dx + dy*dy)
@@ -438,24 +465,70 @@ def graph_traversal(start_nation):
         ans.append((x , tuple(GV.nation_dict[x].get_neighbor_nation().keys())))
 
         for neigh_nation  in GV.nation_dict[x].get_neighbor_nation().keys():
-            '''
-            # Do something 
-            print ( str(x) + "->" + str(neigh_nation))
-            arrow_tail = self.nation_dict[x].center_of_mass
-            arrow_head = self.nation_dict[neigh_nation].center_of_mass
-            set_arrow(arrow_tail , arrow_head, 255,0,0)
-            '''
             if (neigh_nation not in close_list) and (neigh_nation not in open_list):
                 open_list.append(neigh_nation)
     return ans
 
+def get_center_of_mass(points):
+    '''
+    Input : 
+        pionts = [p1,p2,p3, ....]
+    Output : 
+        center of mass - (x,y)
+    '''
+    points_xy = idxy_converter(points, convert_to = 'xy')
+    
+    (sum_x , sum_y) = (0,0)
+    for p in points_xy:
+        sum_x += p[0]
+        sum_y += p[1]
 
-def reachability_test(corner_1, corner_2):
+    center_of_mass = (sum_x / len(points), sum_y / len(points))
+    return center_of_mass
+
+
+def vertexs_sort_2_polygon(points):
+    '''
+    Input : 
+        points : [p1,p2, ....]
+    Output : 
+        points : [p2,p1,p3, .....]
+    Input and output have same length, but output is sorted.
+    '''
+    points_xy = idxy_converter(points , convert_to = 'xy')
+    # 1. get center of mass, Pc  
+    Pc = get_center_of_mass(points_xy)
+    # 2. get vertor_a , points[0] - Pc
+    # vector_a = (points_xy[0] - Pc[0] , points_xy[1] - Pc[1])
+    vexters_dict = {}
+    # vexters_dict[0] = points_xy[0] # key : value , degree : point
+
+    for point in points_xy:
+        # Get vector_b 
+        vector_p = (point[0] - Pc[0] , point[1] - Pc[1])
+        #dot = vector_a[0] * vector_b[0] + vector_a[1] * vector_b[1]
+        #len_a = math.sqrt(vector_a[0]**2 + vector_a[1]**2)
+        #len_b = math.sqrt(vector_b[0]**2 + vector_b[1]**2)
+        #degree = dot / (len_a*len_b)
+        degree = get_vector_angle(vector_p)
+        vexters_dict[degree] = point
+    
+    # TODO 4. dict sort by key 
+    ans = []
+    items = vexters_dict.items()
+    items.sort()
+    for key,value in items:
+        ans.append(value)
+        # print key, value # print key,dict[key]
+    return ans 
+
+
+
+def reachability_test(two_points):
     '''
     check there're not obstacle between corner_1 and corner_2 on map_split
     Input:
-        corner_1(turple - (x,y))
-        corner_2(turple - (x,y))
+        two_points = [p1,p2]
     Output : 
         True : reachable 
         False : unreachable 
@@ -468,6 +541,8 @@ def reachability_test(corner_1, corner_2):
             return False 
     return True
     '''
+    [corner_1 , corner_2] = idxy_converter(two_points , convert_to = 'xy')
+    
     if XY2idx(corner_1) == XY2idx(corner_2):
         rospy.logerr("[reachability_test] corner_1 == corner_1")
         return True 
@@ -484,10 +559,6 @@ def reachability_test(corner_1, corner_2):
     while len(open_list) > 0 : # Exit when there is nothing to explore 
         x = open_list.pop() # FILO
         close_list.append(x)
-        
-        # Debug 
-        #(px,py) = idx2XY(x)
-        #set_point(px, py , 255,0,255, size=0.05)
 
         # Check reached goal 
         if x == XY2idx(corner_2):
@@ -507,8 +578,6 @@ def reachability_test(corner_1, corner_2):
                     if (i not in close_list) and (i not in open_list): 
                         open_list.append(i)
     return False
-
-
 
 ###################################
 ###   Bresemham end condition   ###
