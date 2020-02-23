@@ -3,5 +3,5 @@
     <!--  map server  -->
     <node name="map_server_nav" pkg="map_server" type="map_server" args="$(find lucky_navi)/map/WilloGarage_2.yaml"/>
     <node name="global_planner" pkg="lucky_navi" type="global_planner.py" output="screen"/>
-    <node name='rviz' pkg='rviz' type='rviz' args="-d $(find lucky_navi)/lucky_navi.rviz"/>
+    <node name='rviz' pkg='rviz' type='rviz' args="-d $(find lucky_navi)/rviz/global_planner.rviz"/>
 </launch>

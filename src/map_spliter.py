@@ -36,7 +36,7 @@ class MAP_SPLITER():
                 GV.map_territory.append(0)
         # TODO ---  how to get init edge automatically.
         self.first_nation = None 
-        self.open_edge = [(1437, 1467)] # [(322079, 322109)] # [(1437, 1467)] # [(322079, 322109)] # [(1437, 1467)] # [(322079, 322109)]  # [(1437, 1467)] # [(322079, 322109)]# [(1437, 1467)] edge that still need to explore # [[corner_1 ,corner_2] , [corner_3, corner_4]]
+        self.open_edge = [(322079, 322109)] # [(1437, 1467)] # [(322079, 322109)] # [(1437, 1467)] # [(322079, 322109)] # [(1437, 1467)] # [(322079, 322109)]  # [(1437, 1467)] # [(322079, 322109)]# [(1437, 1467)] edge that still need to explore # [[corner_1 ,corner_2] , [corner_3, corner_4]]
         #                 ^ smaller   ^ bigger
         self.state = "iterating"
 

@@ -1,6 +1,8 @@
 #!/usr/bin/env python
+# https://zh.wikipedia.org/wiki/A*%E6%90%9C%E5%B0%8B%E6%BC%94%E7%AE%97%E6%B3%95 # Document 
 import time
 import math
+from heapdict.heapdict import heapdict # priority queue that can decrease key hd['data'] = priority
 from nav_msgs.msg import OccupancyGrid # Global map 
 from geometry_msgs.msg import PoseArray, PoseStamped, Pose2D, Pose,PoseWithCovarianceStamped   # Global path 
 from radius_table import radius_table
@@ -11,7 +13,7 @@ from visualization_msgs.msg import Marker, MarkerArray # Debug drawing
 from tf import transformations
 
 #----- Flags ------# 
-DEBUG_DRAW_A_START_SET = False  
+DEBUG_DRAW_A_START_SET = True
 
 #----- Load paramters -----# 
 foot_print = [[-0.57, 0.36],[0.57, 0.36],[0.57, -0.36],[-0.57, -0.36]]
@@ -30,12 +32,8 @@ class GLOBAL_PLANNER():
         self.navi_goal = None # idx
         #------- A* -------# 
         # self.state = "stand_by" # "planning" , "finish" , "unreachable", "timeout"
-        self.openset = [] 
-        self.closedset = []
-        self.g_score = {}
-        # self.h_score = {}
-        # self.f_score = {} # F_score = h_score + g_score
-        self.came_from = {}
+        self.pq = heapdict() # pq[index] = cost 
+        self.came_from = {} # came_from['index'] = index of predesessusor
         # self.is_reachable = True  # TODO state????
         self.is_need_pub = False 
         #------- Debug draw -------# 
@@ -48,15 +46,10 @@ class GLOBAL_PLANNER():
         self.global_path = PoseArray()
         #----- Current Pose ------# TODO re-get 
         # self.current_position = Pose2D()
-
         #------ Goal ---------#
         self.navi_goal = None # idx
         #------- A* -------# 
-        self.openset = {}  # -> dict() , combine with f_score[] 
-        self.closedset = {} # -> dict()
-        self.g_score = {}
-        # self.h_score = {}
-        # self.f_score = {} # F_score = h_score + g_score
+        self.pq = heapdict()
         self.came_from = {}
         self.is_need_pub = False 
         self.clean_screen()
@@ -95,17 +88,14 @@ class GLOBAL_PLANNER():
 
     def plan_do_it(self):
         '''
-        Time Loop
+        Blocking function, return until get a result.
         Return plan result : "finish", "unreachable" , "timeout"
         '''
         global pub_marker
         current_pos_idx = self.XY2idx((self.current_position.x, self.current_position.y))
+        #------ First point -------# 
         x = current_pos_idx
-        # self.openset.append(x)
-        self.g_score[x] = self.neighbor_dist(x,x)
-        # self.h_score[x] = self.goal_dis_est(x, self.navi_goal)
-        self.openset[x] = self.g_score[x] + self.goal_dis_est(x, self.navi_goal)
-
+        self.pq[x] = self.neighbor_dist(x,x) + self.goal_dis_est(x, self.navi_goal)
         is_finish_plan = False 
         while not is_finish_plan : 
             #if len(self.openset) == 0:
@@ -113,45 +103,41 @@ class GLOBAL_PLANNER():
             #    self.state = "unreachable"
             #    #self.is_reachable = False
             #    return
-            x = self.lowest()#  x -  having the lowest f_score[] value in openset
+            try:
+                (x, x_cost) = self.pq.popitem() # (index, cost)
+            except IndexError: # the PQ is empty
+                rospy.loginfo("[A*] Can't find lowest set.")
+                continue
             # print ("Current node : "+ str(x)) 
             
             if x == self.navi_goal: #if GOAL is reached
                 rospy.loginfo("[A*] arrive goal !!")
                 is_finish_plan = True 
                 break
-            elif x == -1 : 
-                rospy.loginfo("[A*] Can't find lowest set.")
-                continue
             
             # Debug
             if DEBUG_DRAW_A_START_SET:
                 self.set_point(x, 210, 188 , 167)
-            x_count = 0
-            #Find neighbor of X 
+            #iterate neighbor of X 
             for y in self.neighbor(x):
-                if y in self.closedset: # if y is already closed
-                    if self.closedset[y] < 8:
-                        self.closedset[y] += 1 # X is going to be closedset
-                    elif self.closedset[y] >= 8: # Can get rid of y  
-                        del self.closedset[y]
-                    x_count += 1
-                else: 
-                    tentative_g_score = self.g_score[x] + self.neighbor_dist(x,y) + self.neighbor_delta_cost(x ,y) * 0.1 # 0.1  # Cost: y -x (0 ~ 100)
-                    try: 
-                        if tentative_g_score < self.g_score[y]:
-                            self.came_from[y] = x            #y is key, x is value//make y become child of X 
-                            self.g_score[y] = tentative_g_score
-                            self.openset[y] = self.g_score[y] + self.goal_dis_est(y, self.navi_goal)
-                    except : # y is not in openset
-                        self.came_from[y] = x            #y is key, x is value//make y become child of X 
-                        self.g_score[y] = tentative_g_score
-                        self.openset[y] = self.g_score[y] + self.goal_dis_est(y, self.navi_goal)
-                        #---------- Debug ---------#
+                try: 
+                    y_score = self.pq[y]
+                except KeyError:# y is not in open set 
+                    try:
+                        self.came_from[y]
+                    except KeyError: # y is a brand new point
+                        self.pq[y] = float('inf') # init a new point
+                        self.came_from[y] = x 
+                        y_score = float('inf')
                         if DEBUG_DRAW_A_START_SET:
                             self.set_point(y, 255, 255 , 0)
-            self.closedset[x] = x_count  #add x to closedset 
-            del self.openset[x] # remove x from openset
+                    else:  # y is a closed point , igonre it 
+                        continue
+                # update cost
+                new_y_score = x_cost + self.neighbor_dist(x,y) + self.neighbor_delta_cost(x ,y) * 0.1 # 0.1  # Cost: y -x (0 ~ 100)
+                if new_y_score < y_score:# need to update value (decrease key)
+                    self.came_from[y] = x            #y is key, x is value//make y become child of X 
+                    self.pq[y] = new_y_score
             #if DEBUG_DRAW_A_START_SET:
             #   pub_marker.publish(self.markerArray)
         
@@ -179,7 +165,7 @@ class GLOBAL_PLANNER():
 
     def neighbor_delta_cost(self, x ,y):
         #
-        rospy.loginfo("y : " + str(y))
+        # rospy.loginfo("y : " + str(y))
         if GC.global_costmap.data[y] >= 99:
             return float("inf")
         else: 

@@ -1,0 +1,5 @@
+# gazebo_ros_control_params.yaml
+gazebo_ros_control/pid_gains:
+  driving_wheel_left_joint:  {p: 10.0, i: 0.0, d: 0.0}
+  driving_wheel_right_joint: {p: 10.0, i: 0.0, d: 0.0}
+  realsense_frame_joint:     {p: 10.0, i: 0.0, d: 0.0}

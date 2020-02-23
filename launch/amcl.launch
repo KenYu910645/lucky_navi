@@ -12,7 +12,7 @@
     <!-- ar base (real robot)-->
     <!-- (simulated robot) -->
     <group if="$(arg is_simulation)">
-        <include if="$(arg with_gazebo)" file="$(find ar)/launch/simulation/gazebo_AMR250_willowgarage.launch" />
+        <include if="$(arg with_gazebo)" file="$(find lucky_navi)/launch/gazebo_lucky_willowgarage.launch" />
         <include file="$(find ar)/launch/simulation/ar_base_simulation.launch">
             <arg name="is_multi_lidar" value="$(arg is_multi_lidar)"/>
         </include>

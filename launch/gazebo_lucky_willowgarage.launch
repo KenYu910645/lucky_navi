@@ -1,0 +1,27 @@
+<?xml version="1.0"?>
+<launch>
+
+    <!-- these are the arguments you can pass this launch file, for example paused:=true -->
+    <arg name="paused" default="false"/>
+    <arg name="use_sim_time" default="true"/>
+    <arg name="gui" default="true"/>
+    <arg name="headless" default="false"/>
+    <arg name="debug" default="false"/>
+    <arg name="is_using_external_urdf" default="false"/>
+
+    <!-- We resume the logic in empty_world.launch -->
+    <include file="$(find gazebo_ros)/launch/empty_world.launch">
+        <arg name="world_name"  value="worlds/willowgarage.world" />
+        <arg name="debug" value="$(arg debug)" />
+        <arg name="gui" value="$(arg gui)" />
+        <arg name="paused" value="$(arg paused)"/>
+        <arg name="use_sim_time" value="$(arg use_sim_time)"/>
+        <arg name="headless" value="$(arg headless)"/>
+    </include>
+    
+    <!-- Run a python script to the send a service call to gazebo_ros to spawn a SDF robot -->
+    <node name="urdf_spawner" pkg="gazebo_ros" type="spawn_model" output="screen"
+        args="-file /home/lucky/.gazebo/models/my_robot/model.sdf -sdf -x 0 -y 0 -z 1 -model my_robot"/>
+
+
+</launch>
