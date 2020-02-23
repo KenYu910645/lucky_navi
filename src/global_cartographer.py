@@ -41,32 +41,39 @@ class GLOBAL_CARTOGRAPHER():
         #------ Output : dis2costList ---------# 
         b = pow(0.5, 1 / (self.circum_rad - self.inscribe_rad))# Constant
         for i in range(self.MAX_COST_DISTANCE):
-            if i == 0: 
+            if i == 0: # Inside obstacle 
                 cost = 100
-            elif i*self.resolution  <= self.inscribe_rad : 
+            elif i*self.resolution  <= self.inscribe_rad : # AMR is definitely inside wall -> very danger zone
                 cost = 99
-            else: 
+            else:  # inflation
                 cost = 99 * pow(b ,(i*self.resolution - self.inscribe_rad))
             self.dis2costList.append(cost)
         # print (dis2costList)
         max_idx = self.width * self.height
         print ("INIT OK , takes" + str(time.time() - t_init_start)+ " sec. ")
         
-        for ori_map_pixel in range(len(map.data)):
-            if map.data[ori_map_pixel] == 100:
+        for ori_map_pixel in range(len(map.data)): # iterate every point in map
+            if map.data[ori_map_pixel] == 100: # if points is an obstacle -> create a costmap around it.
                 for radius_iter in range(self.MAX_COST_DISTANCE):# Check pixel surrond it.
                     #----- Decide Cost ------#
                     cost = self.dis2costList[radius_iter]
-                    #----- assign pixel cost -----# 
+                    #----- assign pixel cost -----#
                     for relative_pos in radius_table[radius_iter]:
                         relative_idx = ori_map_pixel + relative_pos[0] + relative_pos[1] * self.width
                         if relative_idx < 0  or relative_idx >= max_idx:  # Avoid data[-1234]
-                            pass# Not valid idx 
+                            pass # Not valid idx 
                         else:
                             if self.global_costmap.data[relative_idx] < cost:
                                 self.global_costmap.data[relative_idx] = cost
                             else:
                                 pass
+        
+        # TODO maybe this realization lack of efficiency?
+        for ori_map_pixel in range(len(map.data)): # iterate every point in map
+            if map.data[ori_map_pixel] == -1: # if points is unknow 
+                self.global_costmap.data[ori_map_pixel] = -1 
+
+
         print ("Time spend at global_costmap : " + str(time.time() - t_start) + " sec. ")
         self.is_need_pub = True 
         
@@ -156,13 +163,9 @@ class GLOBAL_CARTOGRAPHER():
         '''
         idx must be interger
         '''
-        origin = [self.global_costmap.info.origin.position.x , self.global_costmap.info.origin.position.y]
-
-        x = (idx % self.width) * self.resolution + origin[0] + self.resolution/2 # Center of point 
-        # y = round(idx / width) * reso + origin[1] + reso/2 
-        y = math.floor(idx / self.width) * self.resolution + origin[1] + self.resolution/2 
-
-        # print ("(x ,y ) = " + str((x,y)))
+        reso = GC.resolution
+        x = (idx %  GC.width) * reso + GC.global_costmap.info.origin.position.x + reso/2 # Center of point 
+        y = (idx // GC.width) * reso + GC.global_costmap.info.origin.position.y + reso/2  # Use // instead of math.floor(), for efficiency
         return (x, y)
 
     def XY2idx(self,  XY_coor ):

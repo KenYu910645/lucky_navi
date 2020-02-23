@@ -12,8 +12,14 @@ import sys
 from visualization_msgs.msg import Marker, MarkerArray # Debug drawing 
 from tf import transformations
 
+# These are for testing performance 
+import cProfile
+import re
+import pstats # for sorting result 
+
 #----- Flags ------# 
-DEBUG_DRAW_A_START_SET = True
+DEBUG_DRAW_A_START_SET = True 
+TIME_ANALYSE = False 
 
 #----- Load paramters -----# 
 foot_print = [[-0.57, 0.36],[0.57, 0.36],[0.57, -0.36],[-0.57, -0.36]]
@@ -70,14 +76,6 @@ class GLOBAL_PLANNER():
         self.current_position.x = init_pose.pose.pose.position.x
         self.current_position.y = init_pose.pose.pose.position.y
         self.current_position.theta = transformations.euler_from_quaternion(self.pose_quaternion_2_list(init_pose.pose.pose.orientation))[2]
-    
-    def move_base_simple_goal_CB(self, navi_goal):
-        rospy.loginfo("Target : " + str(navi_goal))
-        self.reset()
-        self.navi_goal = self.XY2idx((navi_goal.pose.position.x, navi_goal.pose.position.y))
-        t_start = time.time()
-        self.plan_do_it()
-        rospy.loginfo("[A*] time spend: " + str(time.time() - t_start))
 
     def pose_quaternion_2_list(self, quaternion):
         """
@@ -90,29 +88,23 @@ class GLOBAL_PLANNER():
         '''
         Blocking function, return until get a result.
         Return plan result : "finish", "unreachable" , "timeout"
+        Return -1 if can't find path
         '''
         global pub_marker
         current_pos_idx = self.XY2idx((self.current_position.x, self.current_position.y))
         #------ First point -------# 
         x = current_pos_idx
         self.pq[x] = self.neighbor_dist(x,x) + self.goal_dis_est(x, self.navi_goal)
-        is_finish_plan = False 
-        while not is_finish_plan : 
-            #if len(self.openset) == 0:
-            #    # Can't find a way to Goal 
-            #    self.state = "unreachable"
-            #    #self.is_reachable = False
-            #    return
+        while True:
             try:
-                (x, x_cost) = self.pq.popitem() # (index, cost)
-            except IndexError: # the PQ is empty
-                rospy.loginfo("[A*] Can't find lowest set.")
-                continue
+                #(index, cost)   ,  Get lowest cost in open-set
+                (x, x_cost) = self.pq.popitem() 
+            except IndexError: # the PQ is empty, means every reachable point has already traversed but still can't find goal.
+                return -1  # Can't find path to goal
             # print ("Current node : "+ str(x)) 
             
             if x == self.navi_goal: #if GOAL is reached
                 rospy.loginfo("[A*] arrive goal !!")
-                is_finish_plan = True 
                 break
             
             # Debug
@@ -133,14 +125,13 @@ class GLOBAL_PLANNER():
                             self.set_point(y, 255, 255 , 0)
                     else:  # y is a closed point , igonre it 
                         continue
-                # update cost
+                # update cost                                                                    decide distance v.s. cost
                 new_y_score = x_cost + self.neighbor_dist(x,y) + self.neighbor_delta_cost(x ,y) * 0.1 # 0.1  # Cost: y -x (0 ~ 100)
                 if new_y_score < y_score:# need to update value (decrease key)
                     self.came_from[y] = x            #y is key, x is value//make y become child of X 
                     self.pq[y] = new_y_score
-            #if DEBUG_DRAW_A_START_SET:
-            #   pub_marker.publish(self.markerArray)
-        
+            if DEBUG_DRAW_A_START_SET:
+               pub_marker.publish(self.markerArray)
         #----------------- Publish Path----------------#
         p = self.navi_goal
         dis_sum = 0
@@ -159,6 +150,7 @@ class GLOBAL_PLANNER():
         pub_marker.publish(self.markerArray)
         self.is_need_pub = True 
         # ------ Test -----# 
+        print ("Total points traversed : " + str(len(self.came_from)))
         print ("distance_GRID = " + str(dis_sum))
         print ("distance_eduli = " + str(self.neighbor_dist(self.navi_goal , current_pos_idx)))
         print ("GRID - EDUELI = " + str(dis_sum - self.neighbor_dist(self.navi_goal , current_pos_idx)))
@@ -184,8 +176,7 @@ class GLOBAL_PLANNER():
         dx = x2 - x1 
         dy = y2 - y1 
 
-        ans =  math.sqrt(pow(dx,2) + pow(dy,2))
-        return ans
+        return math.sqrt(dx**2 + dy**2)
     
     def goal_dis_est(self, n, goal):
         '''
@@ -203,46 +194,22 @@ class GLOBAL_PLANNER():
         #else:
         #    return (goal - n) / self.MAP_SIZE
 
-    def lowest (self):
-        '''
-        find the lowest score in the openSet, retrun index.
-        Input: Array
-        output: index 
-        '''
-        ans = -1 
-        lowest_score = float("inf")
-        for i in self.openset:
-            if self.openset[i] < lowest_score:
-                ans = i
-                lowest_score = self.openset[i]
-        return ans
-
     def neighbor(self, x):
         '''
         return neighborhood of x, as a List with 4 node.(up, down, right, left,up-right , up-left, down-right, down-left)
         '''
-        ans = list()
-
-        # UP 
-        ans.append(x + GC.width)
-        # DOWN
-        ans.append(x - GC.width)
-        # RIGHT
-        ans.append(x + 1)
-        # LEFT
-        ans.append(x - 1)
-        # UP-RIGHT
-        ans.append(x + 1 + GC.width)
-        # UP-LEFT
-        ans.append(x - 1 + GC.width)
-        # DOWN-RIGHT
-        ans.append(x + 1 - GC.width)
-        # DOWN-LEFT
-        ans.append(x - 1 - GC.width)
+        ans = ( x + GC.width ,      # UP
+                x - GC.width ,      # DOWN
+                x + 1 ,             # RIGHT
+                x - 1 ,             # LEFT
+                x + 1 + GC.width ,  # UP-RIGHT
+                x - 1 + GC.width ,  # UP-LEFT
+                x + 1 - GC.width ,  # DOWN-RIGHT
+                x - 1 - GC.width )  # DOWN-LEFT
         #----------------- Boundary check ---------------# 
-        ans_wihtout_exceed_boundary = list()
+        ans_wihtout_exceed_boundary = []
         for i in ans:
-            if i >= 0 or i < (GC.width-1) * (GC.height-1) : # illegal range 
+            if GC.global_costmap.data[i] != -1 and i >= 0 and i < (GC.width-1) * (GC.height-1):# inside map and its not unknow point 
                 ans_wihtout_exceed_boundary.append(i)
         return ans_wihtout_exceed_boundary
     
@@ -251,13 +218,9 @@ class GLOBAL_PLANNER():
         '''
         idx must be interger
         '''
-        origin = [GC.global_costmap.info.origin.position.x , GC.global_costmap.info.origin.position.y]
-
-        x = (idx % GC.width) * GC.resolution + origin[0] + GC.resolution/2 # Center of point 
-        # y = round(idx / width) * reso + origin[1] + reso/2 
-        y = math.floor(idx / GC.width) * GC.resolution + origin[1] + GC.resolution/2 
-
-        # print ("(x ,y ) = " + str((x,y)))
+        reso = GC.resolution
+        x = (idx %  GC.width) * reso + GC.global_costmap.info.origin.position.x + reso/2 # Center of point 
+        y = (idx // GC.width) * reso + GC.global_costmap.info.origin.position.y + reso/2  # Use // instead of math.floor(), for efficiency
         return (x, y)
 
     def XY2idx(self,  XY_coor ):
@@ -304,6 +267,23 @@ class GLOBAL_PLANNER():
 #----- Declare Class -----# 
 GP = GLOBAL_PLANNER(foot_print)
 
+def move_base_simple_goal_CB(navi_goal):
+    rospy.loginfo("Target : " + str(navi_goal))
+    GP.reset()
+    GP.navi_goal = GP.XY2idx((navi_goal.pose.position.x, navi_goal.pose.position.y))
+    t_start = time.time()
+    if TIME_ANALYSE:
+        rc = cProfile.run('GP.plan_do_it()','restats')
+        p = pstats.Stats('restats')
+        p.strip_dirs().sort_stats('name').print_stats()
+        p.sort_stats('cumulative').print_stats(30)
+        p.sort_stats('time').print_stats(30)
+    else: 
+        rc = GP.plan_do_it() # This function block until path is found.
+    rospy.loginfo("[A*] time spend: " + str(time.time() - t_start))
+    if rc == -1 :
+        rospy.logerr("[A*] Goal is not reachable.")
+
 def main(args):
 
     #----- Init node ------# 
@@ -311,7 +291,7 @@ def main(args):
     rospy.init_node('global_planner', anonymous=True)
     rospy.Subscriber('/map', OccupancyGrid, GC.global_map_CB)
     # rospy.Subscriber('/current_position', OccupancyGrid, global_planner.current_position_CB) # Use TF to get it. 
-    rospy.Subscriber('/move_base_simple/goal', PoseStamped, global_planner.move_base_simple_goal_CB)
+    rospy.Subscriber('/move_base_simple/goal', PoseStamped, move_base_simple_goal_CB)
     rospy.Subscriber('/initialpose', PoseWithCovarianceStamped, global_planner.initial_pose_goal_CB)
     
     pub_global_costmap = rospy.Publisher('global_costmap', OccupancyGrid ,queue_size = 10,  latch=True)
@@ -330,6 +310,7 @@ def main(args):
 if __name__ == '__main__':
     try:
         main(sys.argv)
+        # cProfile.run('main(sys.argv)')
     except rospy.ROSInterruptException:
         pass
 
