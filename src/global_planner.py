@@ -18,7 +18,7 @@ import re
 import pstats # for sorting result 
 
 #----- Flags ------# 
-DEBUG_DRAW_A_START_SET = True 
+DEBUG_DRAW_A_START_SET = False 
 TIME_ANALYSE = False 
 
 #----- Load paramters -----# 
@@ -33,7 +33,6 @@ class GLOBAL_PLANNER():
         self.global_path = PoseArray()
         #----- Current Pose ------# 
         self.current_position = Pose2D()
-
         #------ Goal ---------#
         self.navi_goal = None # idx
         #------- A* -------# 
@@ -125,13 +124,13 @@ class GLOBAL_PLANNER():
                             self.set_point(y, 255, 255 , 0)
                     else:  # y is a closed point , igonre it 
                         continue
-                # update cost                                                                    decide distance v.s. cost
-                new_y_score = x_cost + self.neighbor_dist(x,y) + self.neighbor_delta_cost(x ,y) * 0.1 # 0.1  # Cost: y -x (0 ~ 100)
+                # update cost                                   decide distance v.s. cost
+                new_y_score = x_cost + self.neighbor_dist(x,y) + self.neighbor_delta_cost(x ,y) * 1  + self.goal_dis_est(y, self.navi_goal)*0.1 # 0.1  # Cost: y -x (0 ~ 100)
                 if new_y_score < y_score:# need to update value (decrease key)
                     self.came_from[y] = x            #y is key, x is value//make y become child of X 
                     self.pq[y] = new_y_score
-            if DEBUG_DRAW_A_START_SET:
-               pub_marker.publish(self.markerArray)
+            #if DEBUG_DRAW_A_START_SET:
+            #   pub_marker.publish(self.markerArray)
         #----------------- Publish Path----------------#
         p = self.navi_goal
         dis_sum = 0
@@ -271,6 +270,10 @@ def move_base_simple_goal_CB(navi_goal):
     rospy.loginfo("Target : " + str(navi_goal))
     GP.reset()
     GP.navi_goal = GP.XY2idx((navi_goal.pose.position.x, navi_goal.pose.position.y))
+    #------ Check if it's a unreachable goal, e.g. outside map or inside wall )---------# 
+    if GC.global_costmap.data[GP.navi_goal] >= 99 or GC.global_costmap.data[GP.navi_goal] == -1:
+        rospy.logerr("[A*] Goal is not reachable.")
+        return 
     t_start = time.time()
     if TIME_ANALYSE:
         rc = cProfile.run('GP.plan_do_it()','restats')

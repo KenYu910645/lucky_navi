@@ -10,7 +10,7 @@ class GLOBAL_CARTOGRAPHER():
     def __init__(self, footprint): 
         self.footprint = footprint
         self.circum_rad = self.getCircumscribed(footprint)
-        self.inscribe_rad = self.getInscribed(footprint) 
+        self.inscribe_rad = self.getInscribed(footprint)
         self.dis2costList = []
         self.MAX_COST_DISTANCE = 20  # 17 pixel radius 
         self.is_need_pub = False # == True, if Global map is need pub.
@@ -19,7 +19,7 @@ class GLOBAL_CARTOGRAPHER():
         self.width = None 
         self.height = None 
         #----- Global costmap ------# 
-        self.global_costmap = OccupancyGrid() # Output 
+        self.global_costmap = OccupancyGrid() # Output
 
     def global_map_CB(self, map):
         t_start = time.time()
@@ -40,13 +40,15 @@ class GLOBAL_CARTOGRAPHER():
         
         #------ Output : dis2costList ---------# 
         b = pow(0.5, 1 / (self.circum_rad - self.inscribe_rad))# Constant
+        slope = 99 / (self.MAX_COST_DISTANCE*self.resolution - self.inscribe_rad) # For linear costmap
         for i in range(self.MAX_COST_DISTANCE):
             if i == 0: # Inside obstacle 
                 cost = 100
             elif i*self.resolution  <= self.inscribe_rad : # AMR is definitely inside wall -> very danger zone
                 cost = 99
             else:  # inflation
-                cost = 99 * pow(b ,(i*self.resolution - self.inscribe_rad))
+                # cost = 99 * pow(b ,(i*self.resolution - self.inscribe_rad)) # exponentail decay
+                cost = 99 - (slope*(i*self.resolution - self.inscribe_rad)) # For linear costmap
             self.dis2costList.append(cost)
         # print (dis2costList)
         max_idx = self.width * self.height
