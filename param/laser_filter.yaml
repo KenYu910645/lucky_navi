@@ -1,0 +1,11 @@
+scan_filter_chain:
+- name: median
+  type: SpaceMedianFilter
+  params:
+    window_size: 9
+    is_ignoring_closer_filtered_point: true
+- name: angle
+  type: LaserScanAngularBoundsFilter
+  params:
+    lower_angle: -1.3788101090755203 # -1.308996938995747 # -1.1344640137963142 # -79deg
+    upper_angle: 0.7854 # 45deg

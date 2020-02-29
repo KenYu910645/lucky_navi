@@ -1,7 +1,56 @@
 <?xml version="1.0"?>
 <launch>
-    <!--  map server  -->
+    <!--include  file="$(find lucky_navi)/launch/gazebo_lucky_willowgarage.launch" /-->
+    <include file="$(find lucky_navi)/launch/gazebo_amr_willowgarage.launch"/>
+
+    <!-- Map servers -->
+    <!--  map server for amcl  -->
+    <node name="map_server_amcl" pkg="map_server" type="map_server" args="$(find lucky_navi)/map/WilloGarage_2.yaml">
+        <remap from="map" to="map_amcl"/>
+    </node>
+    <!--  map server for move_base  -->
     <node name="map_server_nav" pkg="map_server" type="map_server" args="$(find lucky_navi)/map/WilloGarage_2.yaml"/>
-    <node name="global_planner" pkg="lucky_navi" type="global_planner.py" output="screen"/>
-    <node name='rviz' pkg='rviz' type='rviz' args="-d $(find lucky_navi)/rviz/global_planner.rviz"/>
+
+    <!-- *************************************-->
+    <!-- *******   Navigation Statck   *******-->
+    <!-- *************************************-->
+    <node pkg="move_base" type="move_base" respawn="false" name="move_base" output="screen" clear_params="true">
+        <param name="planner_frequency"  value="0.2" />
+        <!-- Global planner -->
+        <param name="base_global_planner" value="navfn/NavfnROS" />
+        <!-- <param name="base_global_planner" value="global_planner/GlobalPlanner" /-->
+        
+        <!-- Costmaps for Multi-lidar AMR-->
+        <rosparam file="$(find lucky_navi)/param/global_costmap_params_multi_lidar.yaml" command="load" ns="global_costmap"/>
+        <rosparam file="$(find lucky_navi)/param/local_costmap_params_multi_lidar.yaml"  command="load" ns="local_costmap"/>
+        
+        <!-- param name="base_local_planner" value="base_local_planner/TrajectoryPlannerROS" / -->
+        
+        <!-- param name="base_local_planner" value="teb_local_planner/TebLocalPlannerROS" / -->
+        
+        <!-- Single-lidar -->
+        <!--rosparam file="$(find lucky_navi)/param/global_costmap_params.yaml" command="load" ns="global_costmap" unless="$(arg is_multi_lidar)" /-->
+        <!--rosparam file="$(find lucky_navi)/param/local_costmap_params.yaml" command="load" ns="local_costmap" unless="$(arg is_multi_lidar)"/-->
+        <param name="base_local_planner" value="dwa_local_planner/DWAPlannerROS" />
+        <rosparam file="$(find lucky_navi)/param/dwa_base_local_planner_params.yaml" command="load" />
+        <!-- rosparam file="$(find ar)/launch/params/move_base/teb_local_planner_params.yaml" command="load" / -->
+
+        <remap from="/cmd_vel" to="/move_base/cmd_vel" />
+    </node>
+
+    <!-- mux (multiplexer) for /cmd_vel -->
+    <node pkg="topic_tools" type="mux" name="mux_cmd_vel" args="/cmd_vel /move_base/cmd_vel /docking/cmd_vel mux:=mux_cmd_vel" />
+
+    <!-- *********************************-->
+    <!-- *******   Localization    *******-->
+    <!-- *********************************-->
+    <node pkg="amcl" type="amcl" name="amcl" output="screen">
+      <rosparam file="$(find lucky_navi)/param/amcl.yaml" command="load" />
+      <remap from="map"  to="map_amcl"/>
+      <remap from="scan" to="scan"/>
+      <remap from="odom" to="odom"/>
+      <remap from="base_link" to="base_footprint"/>
+    </node>
+    <!--node pkg="lucky_navi" type="linear_velocity_planner.py" name="linear_velocity_planner" output="screen"/-->
+    <!--node pkg="lucky_navi" type="polar_coordinate_planner.py" name="polar_coordinate_planner" output="screen"/-->
 </launch>

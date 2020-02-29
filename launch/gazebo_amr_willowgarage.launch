@@ -1,0 +1,86 @@
+<?xml version="1.0"?>
+<launch>
+    <!--Use ira_laser_tools to merge two laser data-->
+    <arg name="is_using_ira" default="false"/>
+
+    <!-- Create a world by willowgarage -->
+    <include file="$(find gazebo_ros)/launch/empty_world.launch">
+        <arg name="world_name"  value="worlds/willowgarage.world" />
+        <arg name="debug" value="false" />
+        <arg name="gui" value="true" />
+        <arg name="paused" value="false"/>
+        <arg name="use_sim_time" value="true"/>
+        <arg name="headless" value="false"/>
+    </include>
+
+    <!-- Robot parameters -->
+    <!-- Is this have to be exsite?-->
+    <rosparam command="load" file="$(find robot_unique_parameters)/params/base.yaml" />
+
+    <!-- Spawn AMR robot -->
+    <param name="robot_description" command="$(find xacro)/xacro --inorder $(find lucky_navi)/robot_description/urdf/amr250.xacro" />
+    <node name="urdf_spawner" pkg="gazebo_ros" type="spawn_model" output="screen"
+        args="-urdf -model amr -param robot_description -x -12 -y -17 -z 0"/>
+    
+    <!-- Load the controllers in Gazebo-->
+    <!-- Load joint controller configurations from YAML file to parameter server -->
+    <rosparam file="$(find lucky_navi)/robot_description/config/amr.yaml" />
+    <node name="controller_spawner" pkg="controller_manager" type="spawner" respawn="false" output="screen"
+        args="joint_state_controller
+              driving_wheel_left_velocity_controller
+              driving_wheel_right_velocity_controller" />
+
+    <!-- Robot state publisher-->
+    <node name="robot_state_publisher" pkg="robot_state_publisher" type="state_publisher">
+        <param name="publish_frequency" value="10.0"/>
+        <param name="ignore_timestamp" value="false"/> <!-- Default: false -->
+        <param name="use_tf_static" value="true"/>
+        <param name="robot_description" command="$(find xacro)/xacro --inorder $(find lucky_navi)/robot_description/urdf/amr250.xacro" />
+    </node>
+
+    <!-- base controller by pyserial communication -->
+    <node name="ar_base_serial" pkg="ar" type="ar_base_simulation.py" output="screen" >
+        <!-- Loop-rate = 100 Hz, which is twice of the sampling-rate of the received signal -->
+        <param name="rate" value="50" /> <!-- 100 -->
+        <!-- Using IMU -->
+        <param name="is_usingIMUforOdom" value="False" />
+        <!-- "Not" using EKF -->
+        <param name="is_usingEKF" value="False" />
+    </node>
+
+    <!-- RPLidar driver -->
+    <!-- Single-lidar -->
+    <!--node pkg="laser_filters" type="scan_to_scan_filter_chain" name="laser_filter_front">
+        <rosparam command="load" file="$(find lucky_navi)/param/laser_filter.yaml" />
+        <remap from="scan" to="/laser_front/scan" />
+        <remap from="scan_filtered" to="/scan_front" />
+    </node>
+    <node pkg="topic_tools" type="relay" name="relay_scan_front" args="/scan_front /scan" /-->
+
+    <!-- Multi-lidar -->
+    <node pkg="laser_filters" type="scan_to_scan_filter_chain" name="laser_filter_front">
+        <rosparam command="load" file="$(find lucky_navi)/param/laser_filter.yaml" />
+        <remap from="scan" to="/laser_front/scan" />
+        <remap from="scan_filtered" to="/scan_front" />
+    </node>
+    <node pkg="laser_filters" type="scan_to_scan_filter_chain" name="laser_filter_rear">
+        <rosparam command="load" file="$(find lucky_navi)/param/laser_filter.yaml" />
+        <remap from="scan" to="/laser_rear/scan" />
+        <remap from="scan_filtered" to="/scan_rear" />
+    </node>
+    <!-- Decide to use ira or not -->
+    <group if="$(arg is_using_ira)">
+        <!-- Laserscans merger -->
+        <node pkg="ira_laser_tools" name="laserscan_multi_merger" type="laserscan_multi_merger_delay_compensation" output="screen">
+                <param name="destination_frame" value="/base_link"/>
+                <param name="reference_frame" value="/odom"/> <!-- The frame for time traveling -->
+                <param name="cloud_destination_topic" value="laserscan_merged_cloud"/>
+                <param name="scan_destination_topic" value="/scan"/>
+                <param name="laserscan_topics" value="/scan_front /scan_rear" /> <!-- LIST OF THE LASER SCAN TOPICS TO SUBSCRIBE -->
+        </node>
+    </group>
+    <group unless="$(arg is_using_ira)">
+        <node pkg="topic_tools" type="relay" name="relay_scan_front" args="/scan_front /scan" />
+        <node pkg="topic_tools" type="relay" name="relay_scan_rear" args="/scan_rear /scan" />
+    </group>
+</launch>

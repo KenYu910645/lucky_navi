@@ -1,6 +1,5 @@
 <?xml version="1.0"?>
 <launch>
-    <!--  map server  -->
     <node name="map_server_nav" pkg="map_server" type="map_server" args="$(find lucky_navi)/map/map3_nav.yaml"/>
     <node name="map_spliter" pkg="lucky_navi" type="main_map.py" output="screen"/>
     <node name='rviz' pkg='rviz' type='rviz' args="-d $(find lucky_navi)/rviz/map_spliter.rviz"/>

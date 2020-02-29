@@ -255,6 +255,7 @@ def main(args):
     #----- Init node ------# 
     rospy.init_node('linear_velocity_planner', anonymous=True)
     rospy.Subscriber('/lucky_navi/goal', Pose2D , LVP.goal_CB) # TODO for testing 
+    # rospy.Subscriber('/move_base_simple/goal', Pose2D , LVP.goal_CB)
     rospy.Subscriber('/current_position', PoseStamped, LVP.current_position_CB) 
 
 

@@ -1,0 +1,50 @@
+# "plugins" for post-Hydro setting
+plugins:
+    - {name: static_layer,          type: "costmap_2d::StaticLayer"}
+    - {name: obstacle_layer,       type: "costmap_2d::ObstacleLayer"} # VoxelLayer
+    - {name: inflation_layer,      type: "costmap_2d::InflationLayer"}
+
+update_frequency: 10.0 # 20.0
+publish_frequency: 5.0 # 10.0
+
+global_frame: /map # odom
+robot_base_frame: /base_footprint
+# static_map: false
+rolling_window: true
+
+transform_tolerance: 0.5
+
+resolution: 0.05 # 0.05
+width: 6.0
+height: 6.0
+
+
+footprint: [[-0.57, 0.36],[0.57, 0.36],[0.57, -0.36],[-0.57, -0.36]]
+# footprint: [[-0.57, 0.28],[-0.52, 0.33],[0.52, 0.33],[0.57, 0.28],[0.57, -0.28],[0.52,-0.33],[-0.52,-0.33],[-0.57, -0.28]]
+
+static_layer:
+    first_map_only: false
+    track_unknown_space: true
+    trinary_costmap: true
+
+obstacle_layer:
+    obstacle_range: 2.0
+    raytrace_range: 15.0
+    ray_trace_reduction_ratio: 0.92 # max: 1.0
+    # Sensors
+    observation_sources: laser_front laser_rear
+    laser_front: {sensor_frame: laser_front, data_type: LaserScan, topic: /scan_front, marking: true, clearing: true, expected_update_rate: 1.0, inf_is_valid: true, observation_persistence: 0.5}
+    laser_rear: {sensor_frame: laser_rear, data_type: LaserScan, topic: /scan_rear, marking: true, clearing: true, expected_update_rate: 1.0, inf_is_valid: true, observation_persistence: 0.5}
+    # consecutive_point_filter
+    consecutive_point_filter_enable: false # true
+    # SOR filter
+    pcl_filter_enable: false # true
+    pcl_filter_type: ROR # SOR
+    sor_meanK: 5
+    sor_standard_deviation_multiplier: 0.001
+    ror_min_neighbors_in_ball: 2
+    ror_searching_radius: 0.1
+
+inflation_layer:
+    inflation_radius: 3.0
+    cost_scaling_factor: 10.0 # 10.0

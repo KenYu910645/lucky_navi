@@ -1,0 +1,22 @@
+# Publish all joint states -----------------------------------
+joint_state_controller:
+  type: joint_state_controller/JointStateController
+  publish_rate: 50
+# Effort Controllers ---------------------------------------
+driving_wheel_left_velocity_controller:
+  type: effort_controllers/JointVelocityController
+  joint: driving_wheel_left_joint
+  pid: {p: 1.0, i: 0.0, d: 0.0}
+driving_wheel_right_velocity_controller:
+  type: effort_controllers/JointVelocityController
+  joint: driving_wheel_right_joint
+  pid: {p: 1.0, i: 0.0, d: 0.0}
+
+# This is for gravity bug
+#gazebo_ros_control:
+#  pid_gains:
+#    driving_wheel_left_joint: {p: 1.0, i: 0.00, d: 0.00}
+#  pid_gains:
+#    driving_wheel_right_joint: {p: 1.0, i: 0.0, d: 0.00}
+#  pid_gains:
+#    joint_state_controller: {p: 1.0, i: 0.0, d: 0.0}

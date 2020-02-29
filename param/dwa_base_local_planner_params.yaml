@@ -1,0 +1,96 @@
+#planner_frequency: 0.5
+planner_frequency: 2.0
+controller_frequency: 20 # 10 # 15 # 10.0
+
+planner_patience: 5.0 # sec.
+controller_patience: 5.0 # 1.0 # 15.0 # sec.
+
+recovery_behavior_enabled: true
+recovery_behaviors: [{name: conservative_reset, type: clear_costmap_recovery/ClearCostmapRecovery}, {name: escape_recovery, type: escape_recovery/EscapeRecovery}, {name: aggressive_reset, type: clear_costmap_recovery/ClearCostmapRecovery}]
+# recovery_behaviors: [{name: conservative_reset, type: clear_costmap_recovery/ClearCostmapRecovery}, {name: escape_recovery, type: escape_recovery/EscapeRecovery}, {name: aggressive_reset, type: clear_costmap_recovery/ClearCostmapRecovery}, {name: wander_recovery, type: escape_recovery/EscapeRecovery}]
+
+# clearing_rotation_allowed: false
+conservative_reset_dist: 10.0 # 3.0
+
+NavfnROS:
+    default_tolerance: 1.0
+
+GlobalPlanner:
+    use_quadratic: false
+    # default_tolerance: 3.0 # This parameter has no effect in this plugin.
+
+DWAPlannerROS:
+   max_trans_vel: 0.6
+   min_trans_vel: 0.05 # 0.05 # 0.05
+   max_vel_x: 0.6 # 0.25
+   min_vel_x: -0.6 # -0.25 # -0.05
+   max_vel_y: 0.0  # zero for a differential drive robot
+   min_vel_y: 0.0
+   max_rot_vel: 0.6 # 1.0
+   min_rot_vel: 0.1 # 0.02 # 0.2
+   acc_lim_x: 1.0
+   acc_lim_y: 0.0  # zero for a differential drive robot
+   acc_lim_theta: 2.0
+
+   yaw_goal_tolerance: 0.1 # 0.1
+   xy_goal_tolerance: 0.1 # 0.1
+   latch_xy_goal_tolerance: true
+
+   oscillation_reset_dist: 0.1 # 0.05 # For DWA 
+   oscillation_reset_angle: 0.5 # 0.2
+
+#   publish_cost_grid_pc: false
+#   prune_plan: true
+   path_distance_bias:  32.0 # 32.0 # 60
+   goal_distance_bias:  24.0 # 24.0
+   occdist_scale:      0.01 # 1.0 # 0.5 # 0.01
+   forward_point_distance: 0.325
+   sim_time: 2.0 # 3.0 # 2.0
+   sim_granularity: 0.05 # 0.025 # 0.1
+   angular_sim_granularity: 0.06 # 0.02
+   vx_samples: 5 # 3
+   vy_samples: 1  # zero for a differential drive robot
+   vtheta_samples: 40 # 40 # 20
+
+   stop_time_buffer: 0.5 # 0.2 # second
+   scaling_speed: 0.2 # 0.25 # m/s
+   max_scaling_factor: 0.2 # 0.2
+   prune_plan: true # prune global path
+   dwa: false # true
+#   simple_attractor: false
+
+escape_recovery:
+    frequency: 20 # Hz
+    vel_max: 0.25 # m/s
+    vel_min: 0.05 # m/s
+    omega_abs_max: 0.2 # rad/s
+    omega_abs_min: 0.05 # rad/s
+    num_vel_smaple: 20 # 20
+    num_omega_sample: 20 # 20
+    sim_time_min: 1.0 # sec. The best sim_time is about 3.0 sec.
+    sim_time_max: 6.0 # sec. The best sim_time is about 3.0 sec.
+    delta_sim_time: 0.5 # sec.
+    is_reset_sim_time_at_free_space: True # True
+    weight_consistent_speed: 2.0 #  10.0 # Relative to the original cost 254
+    footprint_cost_stop: 253 # Once the current footprint_cost is less than or equal ot this value, return
+    min_count_footprint_cost_stop: 10 # Minimum times that the robot stay in footprint_cost_stop
+    is_stop_at_local_minimum: True # True
+    timeout_sec: 20.0 # 5.0 # 20.0 # sec.
+
+wander_recovery:
+    frequency: 20 # Hz
+    vel_max: 0.25 # m/s
+    vel_min: 0.05 # m/s
+    omega_abs_max: 0.1 # rad/s
+    omega_abs_min: 0.01 # rad/s
+    num_vel_smaple: 20 # 20
+    num_omega_sample: 20 # 20
+    sim_time_min: 0.5 # sec. The best sim_time is about 3.0 sec.
+    sim_time_max: 6.0 # sec. The best sim_time is about 3.0 sec.
+    delta_sim_time: 0.1 # sec.
+    is_reset_sim_time_at_free_space: False # True
+    weight_consistent_speed: 2.0 #  10.0 # Relative to the original cost 254
+    footprint_cost_stop: 1 # Once the current footprint_cost is less than or equal ot this value, return
+    min_count_footprint_cost_stop: 10 # Minimum times that the robot stay in footprint_cost_stop
+    is_stop_at_local_minimum: False # True
+    timeout_sec: 10.0 # 5.0 # 20.0 # sec.
