@@ -1,20 +1,30 @@
-# lucky_navi
+# A* algorithm 
 Navigation and localization stack for AMR(Automumous mobile robot)
+
+https://www.youtube.com/watch?v=zjpr26Ilp8I
+
 
 ## Set up 
 This project is build on Ubuntu 16.04, ROS-kinetic, Gazebo9
 
 ## Running 
+Run A* algorithm 
+```
+$roslaunch lucky_navi global_planner.launch
+```
+
+# Argument 
+
+
+
+
 
 Run map split algorithm
 ```
 $roslaunch lucky_navi map_spliter.launch
 ```
 
-Run A* algorithm 
-```
-$roslaunch lucky_navi global_planner.launch
-```
+
 Invoke a willowgarage map 
 global_cartographer.py genarate global costmap 
 global_planner.py genarate 
