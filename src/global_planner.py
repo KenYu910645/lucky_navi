@@ -1,36 +1,35 @@
 #!/usr/bin/env python
 # https://zh.wikipedia.org/wiki/A*%E6%90%9C%E5%B0%8B%E6%BC%94%E7%AE%97%E6%B3%95 # Document 
-import time
-import math
-from heapdict.heapdict import heapdict # priority queue that can decrease key hd['data'] = priority
-from nav_msgs.msg import OccupancyGrid # Global map 
-from geometry_msgs.msg import PoseArray, PoseStamped, Pose2D, Pose,PoseWithCovarianceStamped   # Global path 
-from radius_table import radius_table
-from global_cartographer import GLOBAL_CARTOGRAPHER
 import rospy 
-import sys 
+import sys
+import time
+import operator
+import math
+# ROS msg and libraries
+from nav_msgs.msg import OccupancyGrid, Path # Global map 
+from geometry_msgs.msg import PoseArray, PoseStamped, Pose2D, Pose,PoseWithCovarianceStamped# Global path
 from visualization_msgs.msg import Marker, MarkerArray # Debug drawing 
 from tf import transformations
+# Local module 
+from heapdict.heapdict import heapdict # priority queue that can decrease key hd['data'] = priority
+from radius_table import radius_table
 
 # These are for testing performance 
 import cProfile
 import re
 import pstats # for sorting result 
 
-#----- Flags ------# 
-DEBUG_DRAW_A_START_SET = False 
-TIME_ANALYSE = False 
 
 #----- Load paramters -----# 
 foot_print = [[-0.57, 0.36],[0.57, 0.36],[0.57, -0.36],[-0.57, -0.36]]
 
-GC = GLOBAL_CARTOGRAPHER(foot_print)
-pub_marker = rospy.Publisher('markers', MarkerArray,queue_size = 1,  latch=False )
+pub_marker = rospy.Publisher('markers', MarkerArray,queue_size = 1,  latch=False)
+pub_debug_map = rospy.Publisher('debug_map', OccupancyGrid ,queue_size = 1,  latch=True)
 
 class GLOBAL_PLANNER():
     def __init__(self, footprint):
         #----- Global path -------# 
-        self.global_path = PoseArray()
+        self.global_path = Path()
         #----- Current Pose ------# 
         self.current_position = Pose2D()
         #------ Goal ---------#
@@ -39,16 +38,27 @@ class GLOBAL_PLANNER():
         # self.state = "stand_by" # "planning" , "finish" , "unreachable", "timeout"
         self.pq = heapdict() # pq[index] = cost 
         self.came_from = {} # came_from['index'] = index of predesessusor
-        # self.is_reachable = True  # TODO state????
         self.is_need_pub = False 
+
+        #----- Parameter (Subject to .launch file) ------# 
+        self.DEBUG_DRAW_DEBUG_MAP = True 
+        self.TIME_ANALYSE = False
+        self.EXPLORE_ANIMATE_INTERVEL = 0 # 0 means dont show animation
+        self.USE_DIJKSTRA = False
+        self.OBSTACLE_FACTOR = 0.1 # bigger
+
         #------- Debug draw -------# 
         self.markerArray = MarkerArray()
+        if self.DEBUG_DRAW_DEBUG_MAP:
+            self.costs = {}
+            self.debug_map = OccupancyGrid()
+    
     def reset (self):
         '''
         Clean Current Task , and reset to init.
         '''
         #----- Global path -------#
-        self.global_path = PoseArray()
+        self.global_path = Path()
         #----- Current Pose ------# TODO re-get 
         # self.current_position = Pose2D()
         #------ Goal ---------#
@@ -57,18 +67,15 @@ class GLOBAL_PLANNER():
         self.pq = heapdict()
         self.came_from = {}
         self.is_need_pub = False 
-        self.clean_screen()
+        if self.DEBUG_DRAW_DEBUG_MAP:
+            self.clean_screen()
 
     def clean_screen (self):
-        #------- clean screen -------#
-        marker = Marker()
-        marker.header.frame_id = "/map"
-        marker.action = marker.DELETEALL
-        self.markerArray.markers.append(marker)
-        pub_marker.publish(self.markerArray)
+        self.costs = {}
+        self.debug_map.data = [None]*(self.debug_map.info.width * self.debug_map.info.height)
+        for i in range((self.debug_map.info.width * self.debug_map.info.height)):
+            self.debug_map.data[i] = 0
 
-        #------- Debug draw -------# 
-        self.markerArray = MarkerArray()
     
     def initial_pose_goal_CB(self, init_pose):
         rospy.loginfo("Current_position : " + str(init_pose))
@@ -89,26 +96,22 @@ class GLOBAL_PLANNER():
         Return plan result : "finish", "unreachable" , "timeout"
         Return -1 if can't find path
         '''
-        global pub_marker
-        current_pos_idx = self.XY2idx((self.current_position.x, self.current_position.y))
+        global pub_marker, pub_debug_map
+        current_pos_idx = XY2idx((self.current_position.x, self.current_position.y))
         #------ First point -------# 
+        animate_counter = 0 
         x = current_pos_idx
-        self.pq[x] = self.neighbor_dist(x,x) + self.goal_dis_est(x, self.navi_goal)
+        self.pq[x] = self.dis_est(x, self.navi_goal)
         while True:
             try:
                 #(index, cost)   ,  Get lowest cost in open-set
                 (x, x_cost) = self.pq.popitem() 
             except IndexError: # the PQ is empty, means every reachable point has already traversed but still can't find goal.
                 return -1  # Can't find path to goal
-            # print ("Current node : "+ str(x)) 
             
             if x == self.navi_goal: #if GOAL is reached
                 rospy.loginfo("[A*] arrive goal !!")
                 break
-            
-            # Debug
-            if DEBUG_DRAW_A_START_SET:
-                self.set_point(x, 210, 188 , 167)
             #iterate neighbor of X 
             for y in self.neighbor(x):
                 try: 
@@ -120,64 +123,61 @@ class GLOBAL_PLANNER():
                         self.pq[y] = float('inf') # init a new point
                         self.came_from[y] = x 
                         y_score = float('inf')
-                        if DEBUG_DRAW_A_START_SET:
-                            self.set_point(y, 255, 255 , 0)
                     else:  # y is a closed point , igonre it 
                         continue
-                # update cost                                   decide distance v.s. cost
-                new_y_score = x_cost + self.neighbor_dist(x,y) + self.neighbor_delta_cost(x ,y) * 1  + self.goal_dis_est(y, self.navi_goal)*0.1 # 0.1  # Cost: y -x (0 ~ 100)
+                # update cost                                   decide distance v.s. cost # self.neighbor_delta_cost(x ,y) * 0  +
+                if self.USE_DIJKSTRA: # Dijkstra
+                    new_y_score = (x_cost) + neighbor_dist(x,y) + self.neighbor_delta_cost(x ,y)*self.OBSTACLE_FACTOR
+                else: # A* 
+                    new_y_score = (x_cost - self.dis_est(x, self.navi_goal)) + neighbor_dist(x,y) \
+                                + self.dis_est(y, self.navi_goal) + self.neighbor_delta_cost(x ,y)*self.OBSTACLE_FACTOR
                 if new_y_score < y_score:# need to update value (decrease key)
                     self.came_from[y] = x            #y is key, x is value//make y become child of X 
                     self.pq[y] = new_y_score
-            #if DEBUG_DRAW_A_START_SET:
-            #   pub_marker.publish(self.markerArray)
+                    if self.DEBUG_DRAW_DEBUG_MAP:
+                        self.costs[y] = new_y_score
+            #--- Make a animation while exploring -----#
+            if self.EXPLORE_ANIMATE_INTERVEL != 0:
+                animate_counter += 1
+                if animate_counter % self.EXPLORE_ANIMATE_INTERVEL == self.EXPLORE_ANIMATE_INTERVEL - 1:
+                    self.generate_debug_costmap()
+                    pub_debug_map.publish(self.debug_map)
         #----------------- Publish Path----------------#
         p = self.navi_goal
         dis_sum = 0
         while True: 
             #----- Convert idx -> Pose -------#
-            step = Pose()
+            step = PoseStamped()
+            step.header.frame_id = "map"
+            step.header.stamp = rospy.get_rostime()
             if p == current_pos_idx:
                 rospy.loginfo("Finish drawing !!")
                 break 
-            (step.position.x ,step.position.y) = self.idx2XY(p)
-            self.set_point(p, 255, 255, 255 )
+            (step.pose.position.x ,step.pose.position.y) = idx2XY(p)
+            self.global_path.poses.append(step)
             # ----get Dis ----# 
-            dis_sum += self.neighbor_dist(p , self.came_from[p])
+            dis_sum += neighbor_dist(p , self.came_from[p])
             #----- Rewine ------# 
             p = self.came_from[p]
-        pub_marker.publish(self.markerArray)
+        self.global_path.header.frame_id = "map"
+        self.global_path.header.stamp = rospy.get_rostime()
+        if self.DEBUG_DRAW_DEBUG_MAP:
+            self.generate_debug_costmap()
+            pub_debug_map.publish(self.debug_map)
         self.is_need_pub = True 
         # ------ Test -----# 
         print ("Total points traversed : " + str(len(self.came_from)))
         print ("distance_GRID = " + str(dis_sum))
-        print ("distance_eduli = " + str(self.neighbor_dist(self.navi_goal , current_pos_idx)))
-        print ("GRID - EDUELI = " + str(dis_sum - self.neighbor_dist(self.navi_goal , current_pos_idx)))
+        print ("distance_eduli = " + str(self.dis_est(self.navi_goal , current_pos_idx)))
+        print ("GRID - EDUELI = " + str(dis_sum - self.dis_est(self.navi_goal , current_pos_idx)))
 
     def neighbor_delta_cost(self, x ,y):
-        #
-        # rospy.loginfo("y : " + str(y))
-        if GC.global_costmap.data[y] >= 99:
+        if GC.global_costmap.data[y] >= 99: # Solid wall is unpenetrable
             return float("inf")
         else: 
             return GC.global_costmap.data[y] - GC.global_costmap.data[x]
     
-    def neighbor_dist(self,n1,n2):
-        '''
-        Euclidean distance 
-        return distance between neighbor
-        Input: 
-        n1   -- neighbor 1
-        n2   -- neighbor 2
-        '''
-        (x1, y1) = self.idx2XY(n1)
-        (x2, y2) = self.idx2XY(n2)
-        dx = x2 - x1 
-        dy = y2 - y1 
-
-        return math.sqrt(dx**2 + dy**2)
-    
-    def goal_dis_est(self, n, goal):
+    def dis_est(self, n1, n2):
         '''
         estimate the distance between 'n' and 'goal'
         '''
@@ -185,7 +185,11 @@ class GLOBAL_PLANNER():
         #return (goal - n) % self.MAP_SIZE + (goal - n) / self.MAP_SIZE
 
         #### Euclidean
-        return self.neighbor_dist(n,self.navi_goal)
+        (x1, y1) = idx2XY(n1)
+        (x2, y2) = idx2XY(n2)
+        dx = x2 - x1 
+        dy = y2 - y1 
+        return math.sqrt(dx**2 + dy**2)
         
         #### Chebyshev
         #if (goal - n) % self.MAP_SIZE > (goal - n) / self.MAP_SIZE:
@@ -212,33 +216,6 @@ class GLOBAL_PLANNER():
                 ans_wihtout_exceed_boundary.append(i)
         return ans_wihtout_exceed_boundary
     
-    ############################### SAME AS GLOBAL_CARTOPGRPHER ##################################
-    def idx2XY (self, idx):
-        '''
-        idx must be interger
-        '''
-        reso = GC.resolution
-        x = (idx %  GC.width) * reso + GC.global_costmap.info.origin.position.x + reso/2 # Center of point 
-        y = (idx // GC.width) * reso + GC.global_costmap.info.origin.position.y + reso/2  # Use // instead of math.floor(), for efficiency
-        return (x, y)
-
-    def XY2idx(self,  XY_coor ):
-        '''
-        XY_coor = ( x , y)
-        '''
-        origin = [GC.global_costmap.info.origin.position.x , GC.global_costmap.info.origin.position.y]
-        # Y 
-        idx =  round((XY_coor[1] - origin[1]) / GC.resolution - 0.5) * GC.width
-        # print ("Y : " +  str(idx) )
-        # idx =  math.floor((XY_coor[1] - origin[1]) / reso) * width
-        # X 
-        idx += round((XY_coor[0] - origin[0]) / GC.resolution - 0.5)
-        # idx += math.floor((XY_coor[0] - origin[0]) / reso)
-        # print ("idx = " + str(idx)) 
-        return int(idx)
-
-    ############################### SAME AS GLOBAL_CARTOPGRPHER #################################
-
     def set_point(self, idx ,r ,g ,b ):
         '''
         Set Point at MarkArray 
@@ -258,24 +235,34 @@ class GLOBAL_PLANNER():
         marker.color.g = g/255.0
         marker.color.b = b/255.0
         marker.pose.orientation.w = 1.0
-        (marker.pose.position.x , marker.pose.position.y) = self.idx2XY(idx)
+        (marker.pose.position.x , marker.pose.position.y) = idx2XY(idx)
         self.markerArray.markers.append(marker)
 
     def getCurrentPos (self):
         pass 
-#----- Declare Class -----# 
-GP = GLOBAL_PLANNER(foot_print)
+    def generate_debug_costmap(self):
+        '''
+        Generate debug_map to show a good looking costmap on rviz.
+        Dependency: 
+            self.costs
+        '''
+        # --- get MAX cost of costmap -----# 
+        r = (100.0) / self.costs[max(self.costs.items(), key=operator.itemgetter(1))[0]] # r = 100 / max value in costs
+        # ---- Norma0lize -------# 
+        for i in self.costs:
+            self.debug_map.data[i] = int(self.costs[i] * r)
+
 
 def move_base_simple_goal_CB(navi_goal):
     rospy.loginfo("Target : " + str(navi_goal))
     GP.reset()
-    GP.navi_goal = GP.XY2idx((navi_goal.pose.position.x, navi_goal.pose.position.y))
+    GP.navi_goal = XY2idx((navi_goal.pose.position.x, navi_goal.pose.position.y))
     #------ Check if it's a unreachable goal, e.g. outside map or inside wall )---------# 
     if GC.global_costmap.data[GP.navi_goal] >= 99 or GC.global_costmap.data[GP.navi_goal] == -1:
         rospy.logerr("[A*] Goal is not reachable.")
         return 
     t_start = time.time()
-    if TIME_ANALYSE:
+    if GP.TIME_ANALYSE:
         rc = cProfile.run('GP.plan_do_it()','restats')
         p = pstats.Stats('restats')
         p.strip_dirs().sort_stats('name').print_stats()
@@ -287,19 +274,196 @@ def move_base_simple_goal_CB(navi_goal):
     if rc == -1 :
         rospy.logerr("[A*] Goal is not reachable.")
 
+def global_map_CB(map):
+    t_start = time.time()
+    GC.resolution = map.info.resolution
+    GC.width = map.info.width
+    GC.height = map.info.height
+    print ("Resolution: " + str(GC.resolution))
+    print ("Width: " + str(GC.width))
+    print ("Height: " + str(GC.height))
+    GC.global_costmap.header = map.header 
+    GC.global_costmap.info = map.info
+
+    # ----- Init Global_costmap -----# 
+    t_init_start = time.time()
+    GC.global_costmap.data = [None]*(map.info.width * map.info.height)
+    for i in range((map.info.width * map.info.height)):
+        GC.global_costmap.data[i] = 0
+    
+    #------ Output : dis2costList ---------# 
+    b = pow(0.5, 1 / (GC.circum_rad - GC.inscribe_rad))# Constant
+    slope = 99 / (GC.MAX_COST_DISTANCE*GC.resolution - GC.inscribe_rad) # For linear costmap
+    for i in range(GC.MAX_COST_DISTANCE):
+        if i == 0: # Inside obstacle 
+            cost = 100
+        elif i*GC.resolution  <= GC.inscribe_rad : # AMR is definitely inside wall -> very danger zone
+            cost = 99
+        else:  # inflation
+            # cost = 99 * pow(b ,(i*self.resolution - self.inscribe_rad)) # exponentail decay
+            cost = 99 - (slope*(i*GC.resolution - GC.inscribe_rad)) # For linear costmap
+        GC.dis2costList.append(cost)
+    # print (dis2costList)
+    max_idx = GC.width * GC.height
+    print ("INIT OK , takes" + str(time.time() - t_init_start)+ " sec. ")
+    
+    for ori_map_pixel in range(len(map.data)): # iterate every point in map
+        if map.data[ori_map_pixel] == 100: # if points is an obstacle -> create a costmap around it.
+            for radius_iter in range(GC.MAX_COST_DISTANCE):# Check pixel surrond it.
+                #----- Decide Cost ------#
+                cost = GC.dis2costList[radius_iter]
+                #----- assign pixel cost -----#
+                for relative_pos in radius_table[radius_iter]:
+                    relative_idx = ori_map_pixel + relative_pos[0] + relative_pos[1] * GC.width
+                    if relative_idx < 0  or relative_idx >= max_idx:  # Avoid data[-1234]
+                        pass # Not valid idx 
+                    else:
+                        if GC.global_costmap.data[relative_idx] < cost:
+                            GC.global_costmap.data[relative_idx] = cost
+                        else:
+                            pass
+    
+    # TODO maybe this realization lack of efficiency?
+    for ori_map_pixel in range(len(map.data)): # iterate every point in map
+        if map.data[ori_map_pixel] == -1: # if points is unknow 
+            GC.global_costmap.data[ori_map_pixel] = -1 
+    print ("Time spend at global_costmap : " + str(time.time() - t_start) + " sec. ")
+    GC.is_need_pub = True 
+
+    #---- Debug map for A* -----# 
+    if GP.DEBUG_DRAW_DEBUG_MAP:
+        GP.debug_map        = OccupancyGrid()
+        GP.debug_map.header = GC.global_costmap.header
+        GP.debug_map.info   = GC.global_costmap.info
+        GP.debug_map.data   = [None]*(GP.debug_map.info.width * GP.debug_map.info.height)
+        for i in range((GP.debug_map.info.width * GP.debug_map.info.height)):
+            GP.debug_map.data[i] = 0
+
+class GLOBAL_CARTOGRAPHER():
+    def __init__(self, footprint): 
+        self.footprint = footprint
+        self.circum_rad = self.getCircumscribed(footprint)
+        self.inscribe_rad = self.getInscribed(footprint)
+        self.dis2costList = []
+        self.MAX_COST_DISTANCE = 20  # 17 pixel radius 
+        self.is_need_pub = False # == True, if Global map is need pub.
+        #---- Map info -----# 
+        self.resolution = None 
+        self.width = None 
+        self.height = None 
+        #----- Global costmap ------# 
+        self.global_costmap = OccupancyGrid() # Output
+
+    def getInscribed(self, footprint):
+        shortest_dis = float('inf')
+        for i in range(len(footprint)): # i and i-1 
+            x2 = footprint[i][0]
+            y2 = footprint[i][1]
+            x1 = footprint[i-1][0]
+            y1 = footprint[i-1][1]
+
+            try: 
+                slope  = (y2-y1) / (x2-x1)
+            except:
+                # print ("[getInscribed] Error when calculate Slope, divived by zero?")
+                slope = (y2-y1) / 0.00001
+            
+            dis = abs(y1 - slope * x1) / math.sqrt(slope*slope + 1)
+            if shortest_dis > dis :
+                shortest_dis = dis # update distance
+        return shortest_dis
+
+    def getCircumscribed (self, footprint):
+        shortest_dis = float('inf')
+        for i in footprint:
+            dis = math.sqrt( i[0]*i[0] + i[1]*i[1] )
+            if shortest_dis > dis :
+                shortest_dis = dis # update distance
+        return shortest_dis
+
+
+#######################
+### Global Function ###
+#######################
+def idx2XY (idx):
+    '''
+    idx must be interger
+    '''
+    reso = GC.resolution
+    x = (idx %  GC.width) * reso + GC.global_costmap.info.origin.position.x + reso/2 # Center of point 
+    y = (idx // GC.width) * reso + GC.global_costmap.info.origin.position.y + reso/2  # Use // instead of math.floor(), for efficiency
+    return (x, y)
+
+def XY2idx(XY_coor):
+    '''
+    XY_coor = ( x , y)
+    '''
+    origin = [GC.global_costmap.info.origin.position.x , GC.global_costmap.info.origin.position.y]
+    # Y 
+    idx =  round((XY_coor[1] - origin[1]) / GC.resolution - 0.5) * GC.width
+    # print ("Y : " +  str(idx) )
+    # idx =  math.floor((XY_coor[1] - origin[1]) / reso) * width
+    # X 
+    idx += round((XY_coor[0] - origin[0]) / GC.resolution - 0.5)
+    # idx += math.floor((XY_coor[0] - origin[0]) / reso)
+    # print ("idx = " + str(idx)) 
+    return int(idx)
+
+SQRT_2 = math.sqrt(2)
+def neighbor_dist(n1,n2):
+    '''
+    Euclidean distance 
+    return distance between neighbor
+    Input: 
+    n1   -- neighbor 1 (idx)
+    n2   -- neighbor 2 (idx)
+    '''
+    d_idx = abs(n1-n2)
+    if d_idx == 1 or d_idx == GC.width: # Right or Left, Up or Down 
+        return GC.resolution
+    elif d_idx == GC.width + 1 or d_idx == GC.width -1: # Up-right , up-left, ....
+        return GC.resolution*SQRT_2
+    else:# There're not neighborhood
+        return None 
+
+#----- Declare Class -----# 
+GP = GLOBAL_PLANNER(foot_print)
+GC = GLOBAL_CARTOGRAPHER(foot_print)
+
 def main(args):
 
     #----- Init node ------# 
-    global_planner = GLOBAL_PLANNER(foot_print)
+    # global_planner = GLOBAL_PLANNER(foot_print)
     rospy.init_node('global_planner', anonymous=True)
-    rospy.Subscriber('/map', OccupancyGrid, GC.global_map_CB)
+    
+    #----- Subscribers ------# 
+    rospy.Subscriber('/map', OccupancyGrid, global_map_CB)
     # rospy.Subscriber('/current_position', OccupancyGrid, global_planner.current_position_CB) # Use TF to get it. 
     rospy.Subscriber('/move_base_simple/goal', PoseStamped, move_base_simple_goal_CB)
-    rospy.Subscriber('/initialpose', PoseWithCovarianceStamped, global_planner.initial_pose_goal_CB)
+    rospy.Subscriber('/initialpose', PoseWithCovarianceStamped, GP.initial_pose_goal_CB)
     
+    #----- Publisher -------# 
     pub_global_costmap = rospy.Publisher('global_costmap', OccupancyGrid ,queue_size = 10,  latch=True)
-    pub_global_path = rospy.Publisher('global_path', PoseArray ,queue_size = 10,  latch=False)
-    
+    pub_global_path    = rospy.Publisher('global_path', Path ,queue_size = 1,  latch=False)
+
+    #---- Load paramters ------# 
+    # GLOBAL paramters loading from rosparam server
+    while True :
+        try:
+            #Get namespace of these parameters
+            ns_param = rospy.get_param("/global_planner")
+        except:
+            rospy.loginfo("docking_navigation parameters are not found in rosparam server, keep on trying...")
+            rospy.sleep(0.2) # Sleep 0.2 seconds for waiting the parameters loading
+            continue
+        else: # Get paramter from launch file successfully
+            GP.OBSTACLE_FACTOR          = ns_param ['obstacle_factor']
+            GP.TIME_ANALYSE             = ns_param ['use_time_analyse']
+            GP.USE_DIJKSTRA             = ns_param ['use_dijkstra']
+            GP.DEBUG_DRAW_DEBUG_MAP     = ns_param ['show_debug_map']
+            GP.EXPLORE_ANIMATE_INTERVEL = ns_param ['explore_animate_intervel']
+            break  
+
     r = rospy.Rate(10)#call at 10HZ
     while (not rospy.is_shutdown()):
         if GC.is_need_pub: 

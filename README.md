@@ -15,6 +15,20 @@ Run A* algorithm
 ```
 $roslaunch lucky_navi global_planner.launch
 ```
+Invoke a willowgarage map 
+global_cartographer.py genarate global costmap 
+global_planner.py genarate 
+Using simple goal on the map of rviz to assign a goal for A* 
+TODO : 
+Using argument to swtich debug flag 
+Using costmap-like mark to show marking
+
+
+Run simulation at Gazebo
+```
+$gazebo_amr_willowgarage.launch
+```
+
 
 Run simulation at Gazebo
 ```

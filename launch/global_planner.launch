@@ -1,6 +1,12 @@
 <?xml version="1.0"?>
 <launch>
     <node name="map_server_nav" pkg="map_server" type="map_server" args="$(find lucky_navi)/map/WilloGarage_2.yaml"/>
-    <node name="global_planner" pkg="lucky_navi" type="global_planner.py" output="screen"/>
+    <node name="global_planner" pkg="lucky_navi" type="global_planner.py" output="screen">
+        <param name="show_debug_map" value="true"/>
+        <param name="explore_animate_intervel" value="30"/>
+        <param name="use_time_analyse" value="false"/>
+        <param name="use_dijkstra" value="false"/> <!-- Default: false -->
+        <param name="obstacle_factor" value="0.1"/>
+    </node>
     <node name='rviz' pkg='rviz' type='rviz' args="-d $(find lucky_navi)/rviz/global_planner.rviz"/>
 </launch>
