@@ -4,36 +4,34 @@ Navigation and localization stack for AMR(Automumous mobile robot)
 <div>
 <figure  id="crackers1">
   <img src="pic/dijkstra_room.gif" alt="missing" height="33%" width="40%" />
-  <span>djikstra path finding</span>
   </figure >
    <figure  id="crackers2">
   <img src="pic/a_star_room.gif" alt="missing" height="35%" width="40%" />
-  <span>A* path finding</span>
    </figure >
 <div style="clean:both;"></div>
 </div>
-
-<!--img src="pic/a_star_room.gif"
-     title="A* algorithm"
-     alt="A star algorithm finding a path to room on map" 
-     height="50%"
-     width="50%"
-     style="float:left;"/>
-
-<img src="pic/dijkstra_room.gif"
-     alt="dijkstra algorithm finding a path to room on map" 
-     height="48%"
-     width="50%"
-     style="float:right;"/-->
-    
-
-<img src="pic/dijkstra_near.gif"
+Dijkstra on left-hand-side and A* on right-hand-side
+<!--img src="pic/dijkstra_near.gif"
      alt="Dijkstra algorithm reaching a near goal" 
      style="float: left;" />
 
 <img src="pic/a_star_near.gif"
      alt="A star algorithm reaching a near goal" />
-     style="float: right;" />
+     style="float: right;" /-->
+
+<div>
+<figure  id="crackers1">
+  <img src="pic/dijkstra_near.gif" alt="missing" height="33%" width="40%" />
+  </figure >
+   <figure  id="crackers2">
+  <img src="pic/a_star_near.gif" alt="missing" height="35%" width="40%" />
+   </figure >
+<div style="clean:both;"></div>
+</div>
+Dijkstra on left-hand-side and A* on right-hand-side
+
+
+
 
 ## Set up 
 This project is build on Ubuntu 16.04, ROS-kinetic, Gazebo9
