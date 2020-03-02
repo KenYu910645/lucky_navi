@@ -3,17 +3,17 @@ Navigation and localization stack for AMR(Automumous mobile robot)
 
 <div>
 <figure  id="crackers1">
-  <img src="pic/dijkstra_room.gif" alt="missing" height="40%" width="40%" />
+  <img src="pic/dijkstra_room.gif" alt="missing" height="35%" width="50%" />
   <span>djikstra path finding</span>
   </figure >
    <figure  id="crackers2">
-  <img src="pic/a_star_room.gif" alt="missing" height="40%" width="40%" />
+  <img src="pic/a_star_room.gif" alt="missing" height="35%" width="50%" />
   <span>A* path finding</span>
    </figure >
 <div style="clear:both;"></div>
 </div>
 
-<img src="pic/a_star_room.gif"
+<!--img src="pic/a_star_room.gif"
      title="A* algorithm"
      alt="A star algorithm finding a path to room on map" 
      height="50%"
@@ -24,7 +24,7 @@ Navigation and localization stack for AMR(Automumous mobile robot)
      alt="dijkstra algorithm finding a path to room on map" 
      height="48%"
      width="50%"
-     style="float:right;"/>
+     style="float:right;"/-->
     
 
 <img src="pic/dijkstra_near.gif"
