@@ -1,9 +1,10 @@
 # A* algorithm 
 Navigation and localization stack for AMR(Automumous mobile robot)
 
-https://www.youtube.com/watch?v=zjpr26Ilp8I
-
-
+<!--[a_star_room](pic/a_star_room.gif)-->
+<!--# ![dijkstra_room](pic/dijkstra_room.gif)-->
+![a_star_near](pic/a_star_near.gif)
+![dijkstra_near](pic/dijkstra_near.gif)
 ## Set up 
 This project is build on Ubuntu 16.04, ROS-kinetic, Gazebo9
 
@@ -15,15 +16,10 @@ $roslaunch lucky_navi global_planner.launch
 
 # Argument 
 
-
-
-
-
 Run map split algorithm
 ```
 $roslaunch lucky_navi map_spliter.launch
 ```
-
 
 Invoke a willowgarage map 
 global_cartographer.py genarate global costmap 
