@@ -3,6 +3,20 @@ Navigation and localization stack for AMR(Automumous mobile robot)
 
 <div>
 <figure  id="crackers1">
+  <img src="pic/dijkstra_near.gif" alt="missing" height="33%" width="40%" />
+  </figure >
+   <figure  id="crackers2">
+  <img src="pic/a_star_near.gif" alt="missing" height="35%" width="40%" />
+   </figure >
+<div style="float:middle;"></div>
+</div>
+
+ <div align="center">
+  Dijkstra on left-hand-side and A* on right-hand-side
+</div> 
+
+<div>
+<figure  id="crackers1">
   <img src="pic/dijkstra_room.gif" alt="missing" height="30%" width="40%" />
   </figure >
    <figure  id="crackers2">
@@ -12,16 +26,7 @@ Navigation and localization stack for AMR(Automumous mobile robot)
 </div>
 <center>Dijkstra on left-hand-side and A* on right-hand-side</center> | 
 
-<div>
-<figure  id="crackers1">
-  <img src="pic/dijkstra_near.gif" alt="missing" height="33%" width="40%" />
-  </figure >
-   <figure  id="crackers2">
-  <img src="pic/a_star_near.gif" alt="missing" height="35%" width="40%" />
-   </figure >
-<div style="float:middle;"></div>
-</div>
-<center>Dijkstra on left-hand-side and A* on right-hand-side</center> |
+
 
 
 
