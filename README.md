@@ -17,13 +17,13 @@ Navigation and localization stack for AMR(Automumous mobile robot)
      title="A* algorithm"
      alt="A star algorithm finding a path to room on map" 
      height="50%"
-     width="45%"
+     width="50%"
      style="float:left;"/>
 
 <img src="pic/dijkstra_room.gif"
      alt="dijkstra algorithm finding a path to room on map" 
-     height="30%"
-     width="45%"
+     height="48%"
+     width="50%"
      style="float:right;"/>
     
 
