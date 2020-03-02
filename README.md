@@ -1,8 +1,9 @@
 # A* algorithm 
 Navigation and localization stack for AMR(Automumous mobile robot)
 
-<!--[a_star_room](pic/a_star_room.gif)-->
-<!--# ![dijkstra_room](pic/dijkstra_room.gif)-->
+![a_star_room](pic/test.png|width=100)
+
+![dijkstra_room](pic/dijkstra_room.gif)
 ![a_star_near](pic/a_star_near.gif)
 ![dijkstra_near](pic/dijkstra_near.gif)
 ## Set up 
