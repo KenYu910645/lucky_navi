@@ -1,17 +1,17 @@
 # A* algorithm 
 Navigation and localization stack for AMR(Automumous mobile robot)
 
-<!--div>
+<div>
 <figure  id="crackers1">
-  <img src="pic/a_star_room.gif" alt="missing" height="40%" width="40%" />
-  <span>Peppermint Thins</span>
+  <img src="pic/dijkstra_room.gif" alt="missing" height="40%" width="40%" />
+  <span>djikstra path finding</span>
   </figure >
    <figure  id="crackers2">
   <img src="pic/a_star_room.gif" alt="missing" height="40%" width="40%" />
-  <span>Ritz Crackers</span>
+  <span>A* path finding</span>
    </figure >
 <div style="clear:both;"></div>
-</div-->
+</div>
 
 <img src="pic/a_star_room.gif"
      title="A* algorithm"
