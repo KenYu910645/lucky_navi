@@ -10,14 +10,7 @@ Navigation and localization stack for AMR(Automumous mobile robot)
    </figure >
 <div style="clean:both;"></div>
 </div>
-Dijkstra on left-hand-side and A* on right-hand-side
-<!--img src="pic/dijkstra_near.gif"
-     alt="Dijkstra algorithm reaching a near goal" 
-     style="float: left;" /-->
-
-<!--img src="pic/a_star_near.gif"
-     alt="A star algorithm reaching a near goal" />
-     style="float: right;" /-->
+<center>Dijkstra on left-hand-side and A* on right-hand-side</center> | 
 
 <div>
 <figure  id="crackers1">
@@ -28,7 +21,7 @@ Dijkstra on left-hand-side and A* on right-hand-side
    </figure >
 <div style="float:middle;"></div>
 </div>
-Dijkstra on left-hand-side and A* on right-hand-side
+<center>Dijkstra on left-hand-side and A* on right-hand-side</center> |
 
 
 
