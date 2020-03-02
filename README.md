@@ -3,14 +3,14 @@ Navigation and localization stack for AMR(Automumous mobile robot)
 
 <div>
 <figure  id="crackers1">
-  <img src="pic/dijkstra_room.gif" alt="missing" height="35%" width="40%" />
+  <img src="pic/dijkstra_room.gif" alt="missing" height="33%" width="40%" />
   <span>djikstra path finding</span>
   </figure >
    <figure  id="crackers2">
   <img src="pic/a_star_room.gif" alt="missing" height="35%" width="40%" />
   <span>A* path finding</span>
    </figure >
-<div style="float:left;"></div>
+<div style="clean:both;"></div>
 </div>
 
 <!--img src="pic/a_star_room.gif"
