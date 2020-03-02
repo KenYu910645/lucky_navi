@@ -1,11 +1,40 @@
 # A* algorithm 
 Navigation and localization stack for AMR(Automumous mobile robot)
 
-![a_star_room](pic/test.png|width=100)
+<!--div>
+<figure  id="crackers1">
+  <img src="pic/a_star_room.gif" alt="missing" height="40%" width="40%" />
+  <span>Peppermint Thins</span>
+  </figure >
+   <figure  id="crackers2">
+  <img src="pic/a_star_room.gif" alt="missing" height="40%" width="40%" />
+  <span>Ritz Crackers</span>
+   </figure >
+<div style="clear:both;"></div>
+</div-->
 
-![dijkstra_room](pic/dijkstra_room.gif)
-![a_star_near](pic/a_star_near.gif)
-![dijkstra_near](pic/dijkstra_near.gif)
+<img src="pic/a_star_room.gif"
+     title="A* algorithm"
+     alt="A star algorithm finding a path to room on map" 
+     height="50%"
+     width="45%"
+     style="float:left;"/>
+
+<img src="pic/dijkstra_room.gif"
+     alt="dijkstra algorithm finding a path to room on map" 
+     height="30%"
+     width="45%"
+     style="float:right;"/>
+    
+
+<img src="pic/dijkstra_near.gif"
+     alt="Dijkstra algorithm reaching a near goal" 
+     style="float: left;" />
+
+<img src="pic/a_star_near.gif"
+     alt="A star algorithm reaching a near goal" />
+     style="float: right;" />
+
 ## Set up 
 This project is build on Ubuntu 16.04, ROS-kinetic, Gazebo9
 
@@ -46,3 +75,5 @@ $roslaunch lucky_navi lucky_navi.launch
 
 
 ## Node and topic relationship
+
+## Referance
