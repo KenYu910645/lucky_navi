@@ -8,7 +8,6 @@ import math
 # ROS msg and libraries
 from nav_msgs.msg import OccupancyGrid, Path # Global map 
 from geometry_msgs.msg import PoseArray, PoseStamped, Pose2D, Pose,PoseWithCovarianceStamped# Global path
-from visualization_msgs.msg import Marker, MarkerArray # Debug drawing 
 from tf import transformations
 # Local module 
 from heapdict.heapdict import heapdict # priority queue that can decrease key hd['data'] = priority
@@ -23,7 +22,6 @@ import pstats # for sorting result
 #----- Load paramters -----# 
 foot_print = [[-0.57, 0.36],[0.57, 0.36],[0.57, -0.36],[-0.57, -0.36]]
 
-pub_marker = rospy.Publisher('markers', MarkerArray,queue_size = 1,  latch=False)
 pub_debug_map = rospy.Publisher('debug_map', OccupancyGrid ,queue_size = 1,  latch=True)
 
 class GLOBAL_PLANNER():
@@ -39,7 +37,6 @@ class GLOBAL_PLANNER():
         self.pq = heapdict() # pq[index] = cost 
         self.came_from = {} # came_from['index'] = index of predesessusor
         self.is_need_pub = False 
-
         #----- Parameter (Subject to .launch file) ------# 
         self.DEBUG_DRAW_DEBUG_MAP = True 
         self.TIME_ANALYSE = False
@@ -48,7 +45,6 @@ class GLOBAL_PLANNER():
         self.OBSTACLE_FACTOR = 0.1 # bigger
 
         #------- Debug draw -------# 
-        self.markerArray = MarkerArray()
         if self.DEBUG_DRAW_DEBUG_MAP:
             self.costs = {}
             self.debug_map = OccupancyGrid()
@@ -96,7 +92,7 @@ class GLOBAL_PLANNER():
         Return plan result : "finish", "unreachable" , "timeout"
         Return -1 if can't find path
         '''
-        global pub_marker, pub_debug_map
+        global pub_debug_map
         current_pos_idx = XY2idx((self.current_position.x, self.current_position.y))
         #------ First point -------# 
         animate_counter = 0 
@@ -215,29 +211,6 @@ class GLOBAL_PLANNER():
             if GC.global_costmap.data[i] != -1 and i >= 0 and i < (GC.width-1) * (GC.height-1):# inside map and its not unknow point 
                 ans_wihtout_exceed_boundary.append(i)
         return ans_wihtout_exceed_boundary
-    
-    def set_point(self, idx ,r ,g ,b ):
-        '''
-        Set Point at MarkArray 
-        '''
-        marker = Marker()
-        marker.header.frame_id = "/map"
-        marker.id = idx 
-        marker.ns = "tiles"
-        marker.header.stamp = rospy.get_rostime()
-        marker.type = marker.SPHERE
-        marker.action = marker.ADD
-        marker.scale.x = 0.05
-        marker.scale.y = 0.05
-        marker.scale.z = 0.05
-        marker.color.a = 1.0
-        marker.color.r = r/255.0
-        marker.color.g = g/255.0
-        marker.color.b = b/255.0
-        marker.pose.orientation.w = 1.0
-        (marker.pose.position.x , marker.pose.position.y) = idx2XY(idx)
-        self.markerArray.markers.append(marker)
-
     def getCurrentPos (self):
         pass 
     def generate_debug_costmap(self):
